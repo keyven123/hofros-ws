@@ -40,7 +40,7 @@ class PublicDirectPortalResource extends JsonResource
             'primaryColor' => $row->guest_portal_primary_color ?? '#1B4F8A',
             'accentColor' => $row->guest_portal_accent_color ?? '#F5A623',
             'heroImageUrl' => $row->guest_portal_hero_image_url
-                ?? 'https://images.unsplash.com/photo-1566073771259-6a850eaba8c9?auto=format&fit=crop&w=1600&q=80',
+                ?? 'https://images.unsplash.com/photo-1540541338287-41700207dee6?auto=format&fit=crop&w=1600&q=80',
             'layout' => GuestPortalLayout::normalize($row->guest_portal_layout),
             'units' => GuestPortalUnits::publicPayloadForUserUuid($user->uuid),
         ];

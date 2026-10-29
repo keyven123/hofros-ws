@@ -40,6 +40,9 @@ class User extends Authenticatable
         'address',
         'email',
         'password',
+        'is_platform_admin',
+        'is_marketing',
+        'account_status',
     ];
 
     /**
@@ -62,7 +65,19 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_platform_admin' => 'boolean',
+            'is_marketing' => 'boolean',
         ];
+    }
+
+    public function scopeMerchants($query)
+    {
+        return $query->where('is_platform_admin', false)->where('is_marketing', false);
+    }
+
+    public function ownedProspects(): HasMany
+    {
+        return $this->hasMany(MarketingProspect::class, 'owner_user_uuid', 'uuid');
     }
 
     public function properties(): HasMany
@@ -93,5 +108,10 @@ class User extends Authenticatable
     public function bookings(): HasMany
     {
         return $this->hasMany(Booking::class);
+    }
+
+    public function subscription(): HasOne
+    {
+        return $this->hasOne(MerchantSubscription::class, 'user_uuid', 'uuid');
     }
 }

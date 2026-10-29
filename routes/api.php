@@ -1,11 +1,22 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AccountSettingsController;
 use App\Http\Controllers\Api\V1\AnalyticsController;
+use App\Http\Controllers\Api\V1\PaymentSettingsController;
+use App\Http\Controllers\Api\V1\AdminAuthController;
+use App\Http\Controllers\Api\V1\AdminConsoleController;
+use App\Http\Controllers\Api\V1\AdminMarketingController;
+use App\Http\Controllers\Api\V1\MarketingAuthController;
+use App\Http\Controllers\Api\V1\MarketingWorkspaceController;
+use App\Http\Controllers\Api\V1\AdminSubscriptionController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BookingController;
 use App\Http\Controllers\Api\V1\BookingPaymentController;
 use App\Http\Controllers\Api\V1\BookingPortalController;
 use App\Http\Controllers\Api\V1\CalendarController;
+use App\Http\Controllers\Api\V1\CustomerAuthController;
+use App\Http\Controllers\Api\V1\CustomerController;
+use App\Http\Controllers\Api\V1\PortalMessageController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\PublicDirectPortalBookingController;
 use App\Http\Controllers\Api\V1\PublicDirectPortalCalendarController;
@@ -20,12 +31,18 @@ use App\Http\Controllers\Api\V1\Configuration\TeamMemberController;
 use App\Http\Controllers\Api\V1\Configuration\UnitController;
 use App\Http\Controllers\Api\V1\Configuration\UnitRateIntervalController;
 use App\Http\Controllers\Api\V1\HealthController;
+use App\Http\Controllers\Api\V1\MerchantSubscriptionController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function (): \Illuminate\Http\JsonResponse {
     return response()->json([
+        'ok' => true,
         'status' => 'ok',
+        'service' => 'hofros-api',
+        'name' => 'Hofros',
         'message' => 'hofros API is running',
+        'version' => '1.0.0',
+        'health' => url('/api/health'),
     ]);
 });
 
@@ -41,10 +58,50 @@ Route::prefix('v1')->group(function (): void {
         ->where('slug', '[a-z0-9-]+');
     Route::post('/public/direct-portals/{slug}/bookings', [PublicDirectPortalBookingController::class, 'store'])
         ->where('slug', '[a-z0-9-]+');
+    Route::post('/customer/register', [CustomerAuthController::class, 'register']);
+    Route::post('/customer/login', [CustomerAuthController::class, 'login']);
+    Route::middleware(['auth:sanctum', 'customer'])->group(function (): void {
+        Route::get('/customer/me', [CustomerAuthController::class, 'me']);
+        Route::post('/customer/logout', [CustomerAuthController::class, 'logout']);
+        Route::get('/public/direct-portals/{slug}/messages', [PortalMessageController::class, 'customerIndex'])
+            ->where('slug', '[a-z0-9-]+');
+        Route::post('/public/direct-portals/{slug}/messages', [PortalMessageController::class, 'customerStore'])
+            ->where('slug', '[a-z0-9-]+');
+    });
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/admin/login', [AdminAuthController::class, 'login']);
+    Route::post('/marketing/login', [MarketingAuthController::class, 'login']);
+    Route::middleware(['auth:sanctum', 'marketing'])->prefix('marketing')->group(function (): void {
+        Route::get('/home', [MarketingWorkspaceController::class, 'home']);
+        Route::post('/prospects', [MarketingWorkspaceController::class, 'store']);
+        Route::put('/prospects/{prospect}/status', [MarketingWorkspaceController::class, 'updateStatus']);
+        Route::post('/prospects/{prospect}/notes', [MarketingWorkspaceController::class, 'storeNote']);
+    });
 
-    Route::middleware('auth:sanctum')->group(function (): void {
+    Route::middleware(['auth:sanctum', 'platform-admin'])->prefix('admin')->group(function (): void {
+        Route::get('/me', [AdminConsoleController::class, 'me']);
+        Route::get('/dashboard', [AdminConsoleController::class, 'dashboard']);
+        Route::get('/merchants', [AdminConsoleController::class, 'merchants']);
+        Route::get('/merchants/{merchant}', [AdminConsoleController::class, 'merchant']);
+        Route::get('/bookings', [AdminConsoleController::class, 'bookings']);
+        Route::get('/calendars', [AdminConsoleController::class, 'calendars']);
+        Route::get('/users', [AdminConsoleController::class, 'users']);
+        Route::get('/marketing', [AdminMarketingController::class, 'index']);
+        Route::post('/marketing', [AdminMarketingController::class, 'store']);
+        Route::post('/marketing/accounts', [AdminMarketingController::class, 'storeAccount']);
+        Route::put('/marketing/{prospect}/status', [AdminMarketingController::class, 'updateStatus']);
+        Route::post('/marketing/{prospect}/notes', [AdminMarketingController::class, 'storeNote']);
+        Route::put('/marketing/{prospect}', [AdminMarketingController::class, 'update']);
+        Route::delete('/marketing/{prospect}', [AdminMarketingController::class, 'destroy']);
+        Route::get('/subscriptions', [AdminSubscriptionController::class, 'index']);
+        Route::post('/subscriptions/plans', [AdminSubscriptionController::class, 'storePlan']);
+        Route::put('/subscriptions/plans/{plan}', [AdminSubscriptionController::class, 'updatePlan']);
+        Route::put('/subscriptions/features', [AdminSubscriptionController::class, 'updateFeatures']);
+        Route::post('/subscriptions/assign', [AdminSubscriptionController::class, 'assign']);
+    });
+
+    Route::middleware(['auth:sanctum', 'merchant'])->group(function (): void {
         Route::get('/configuration/properties', [PropertyController::class, 'index']);
         Route::post('/configuration/properties', [PropertyController::class, 'store']);
         Route::put('/configuration/properties/{id}', [PropertyController::class, 'update']);
@@ -65,8 +122,15 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/configuration/notifications', [NotificationSettingsController::class, 'show']);
         Route::put('/configuration/notifications', [NotificationSettingsController::class, 'update']);
 
+        Route::get('/account', [AccountSettingsController::class, 'show']);
+        Route::put('/account', [AccountSettingsController::class, 'update']);
+        Route::put('/account/password', [AccountSettingsController::class, 'updatePassword']);
+        Route::get('/account/payment', [PaymentSettingsController::class, 'show']);
+        Route::put('/account/payment', [PaymentSettingsController::class, 'update']);
+
         Route::get('/configuration/team', [TeamMemberController::class, 'index']);
         Route::patch('/configuration/team/{id}', [TeamMemberController::class, 'update']);
+        Route::delete('/configuration/team/{id}', [TeamMemberController::class, 'destroy']);
         Route::post('/configuration/team/invite', [TeamMemberController::class, 'invite']);
 
         Route::get('/booking-portals', [BookingPortalController::class, 'index']);
@@ -112,5 +176,18 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/discounts/unit-discounts', [UnitDiscountController::class, 'store']);
         Route::put('/discounts/unit-discounts/{id}', [UnitDiscountController::class, 'update']);
         Route::delete('/discounts/unit-discounts/{id}', [UnitDiscountController::class, 'destroy']);
+
+        Route::get('/subscription', [MerchantSubscriptionController::class, 'show']);
+        Route::get('/subscription/upcoming-invoice', [MerchantSubscriptionController::class, 'upcomingInvoice']);
+        Route::get('/subscription/payments', [MerchantSubscriptionController::class, 'payments']);
+        Route::post('/subscription/pay', [MerchantSubscriptionController::class, 'pay']);
+        Route::post('/subscription/checkout', [MerchantSubscriptionController::class, 'checkout']);
+        Route::post('/subscription/checkout/confirm', [MerchantSubscriptionController::class, 'confirmCheckout']);
+        Route::post('/subscription/features/toggle', [MerchantSubscriptionController::class, 'toggle']);
+
+        Route::get('/customers', [CustomerController::class, 'index']);
+        Route::get('/messages', [PortalMessageController::class, 'merchantIndex']);
+        Route::post('/messages/{customerUuid}/read', [PortalMessageController::class, 'merchantRead']);
+        Route::post('/messages/{customerUuid}', [PortalMessageController::class, 'merchantReply']);
     });
 });

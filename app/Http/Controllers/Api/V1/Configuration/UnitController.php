@@ -10,13 +10,16 @@ use App\Http\Requests\Unit\UpdateUnitRequest;
 use App\Http\Requests\Unit\UpdateUnitWeekScheduleRequest;
 use App\Http\Requests\Unit\UploadUnitImagesRequest;
 use App\Http\Resources\UnitResource;
+use App\Services\SubscriptionBillingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 
 class UnitController extends Controller
 {
-    public function __construct(protected UnitRepository $unitRepository)
-    {
+    public function __construct(
+        protected UnitRepository $unitRepository,
+        protected SubscriptionBillingService $billing,
+    ) {
     }
 
     public function index(ListUnitRequest $request): JsonResponse
@@ -41,6 +44,7 @@ class UnitController extends Controller
 
         $unit = $this->unitRepository->create($request->toModelPayload($fallbackCurrency));
         $unit->load('property:uuid,property_name');
+        $this->billing->syncRoomUsage($request->user());
 
         return (new UnitResource($unit))
             ->response()
@@ -63,6 +67,7 @@ class UnitController extends Controller
         $payload = $request->toModelPayload($fallbackCurrency);
         $this->unitRepository->update($unit, $payload);
         $unit->refresh()->load('property:uuid,property_name');
+        $this->billing->syncRoomUsage($request->user());
 
         return (new UnitResource($unit))->response();
     }
@@ -107,6 +112,7 @@ class UnitController extends Controller
         $request = request();
         $unit = $this->unitRepository->fetchOrThrow('uuid', $uuid, $request->user()->uuid);
         $this->unitRepository->delete($unit);
+        $this->billing->syncRoomUsage($request->user());
 
         return response()->json(['message' => 'Unit deleted.']);
     }

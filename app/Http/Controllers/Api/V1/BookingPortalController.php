@@ -323,7 +323,7 @@ class BookingPortalController extends Controller
 
     private function defaultGuestPortalHeroUrl(): string
     {
-        return 'https://images.unsplash.com/photo-1566073771259-6a850eaba8c9?auto=format&fit=crop&w=1600&q=80';
+        return 'https://images.unsplash.com/photo-1540541338287-41700207dee6?auto=format&fit=crop&w=1600&q=80';
     }
 
     private function assertPortalKey(string $portalKey): void

@@ -21,6 +21,7 @@ class UserResource extends JsonResource
             'contact_number' => $this->contact_number,
             'address' => $this->address,
             'email' => $this->email,
+            'is_platform_admin' => (bool) $this->is_platform_admin,
             'email_verified_at' => $this->email_verified_at?->toIso8601String(),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),

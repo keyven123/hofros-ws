@@ -17,6 +17,7 @@ class GuestPortalLayoutTest extends TestCase
         $this->assertCount(5, $defaults['sectionOrder']);
         $this->assertTrue($defaults['sectionVisibility']['hero']);
         $this->assertTrue($defaults['showReviews']);
+        $this->assertTrue($defaults['allowGuestMessages']);
     }
 
     #[\PHPUnit\Framework\Attributes\Test]
@@ -132,5 +133,21 @@ class GuestPortalLayoutTest extends TestCase
         $this->assertFalse($out['sectionVisibility']['amenities']);
         $this->assertFalse($out['showReviews']);
         $this->assertFalse($out['showMap']);
+    }
+
+    #[\PHPUnit\Framework\Attributes\Test]
+    public function testClampKeepsKnownDesignTemplate(): void
+    {
+        $kept = GuestPortalLayout::clamp(['designTemplate' => 'editorial']);
+        $advance = GuestPortalLayout::clamp(['designTemplate' => 'luxe_glass']);
+        $professional = GuestPortalLayout::clamp(['designTemplate' => 'atrium']);
+        $premium = GuestPortalLayout::clamp(['designTemplate' => 'crown_royal']);
+        $dropped = GuestPortalLayout::clamp(['designTemplate' => 'not-a-template']);
+
+        $this->assertSame('editorial', $kept['designTemplate']);
+        $this->assertSame('luxe_glass', $advance['designTemplate']);
+        $this->assertSame('atrium', $professional['designTemplate']);
+        $this->assertSame('crown_royal', $premium['designTemplate']);
+        $this->assertSame('', $dropped['designTemplate']);
     }
 }

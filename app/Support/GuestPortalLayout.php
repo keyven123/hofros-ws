@@ -6,6 +6,31 @@ final class GuestPortalLayout
 {
     public const SECTION_IDS = ['hero', 'units', 'amenities', 'reviews', 'contact'];
 
+    public const TEMPLATE_IDS = [
+        'bold_modern',
+        'soft_friendly',
+        'clean_minimal',
+        'nature_warm',
+        'editorial',
+        'luxe_glass',
+        'gallery_split',
+        'ribbon',
+        'sanctuary',
+        'midnight',
+        'atrium',
+        'concierge',
+        'monument',
+        'harbor',
+        'residence',
+        'ledger',
+        'crown_royal',
+        'palace',
+        'imperial',
+        'regent',
+        'sovereign',
+        'dynasty',
+    ];
+
     /**
      * @return array<string, mixed>
      */
@@ -33,6 +58,8 @@ final class GuestPortalLayout
             ],
             'showReviews' => true,
             'showMap' => true,
+            'allowGuestMessages' => true,
+            'designTemplate' => '',
         ];
     }
 
@@ -133,6 +160,10 @@ final class GuestPortalLayout
 
         $out['showReviews'] = (bool) ($layout['showReviews'] ?? true);
         $out['showMap'] = (bool) ($layout['showMap'] ?? true);
+        $out['allowGuestMessages'] = (bool) ($layout['allowGuestMessages'] ?? true);
+
+        $template = self::str($layout['designTemplate'] ?? '', 48);
+        $out['designTemplate'] = in_array($template, self::TEMPLATE_IDS, true) ? $template : '';
 
         return $out;
     }

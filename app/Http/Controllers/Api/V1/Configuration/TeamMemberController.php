@@ -11,6 +11,7 @@ use App\Http\Requests\TeamMember\UpdateTeamMemberRequest;
 use App\Http\Resources\TeamMemberResource;
 use App\Models\TeamMember;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 class TeamMemberController extends Controller
@@ -75,5 +76,20 @@ class TeamMemberController extends Controller
         return (new TeamMemberResource($member))
             ->response()
             ->setStatusCode(Response::HTTP_CREATED);
+    }
+
+    public function destroy(Request $request, string $uuid): JsonResponse
+    {
+        $member = $this->memberRepository->fetchOrThrow('uuid', $uuid, $request->user()->uuid);
+
+        if ($member->email === $request->user()->email) {
+            throw new TeamMemberOperationException('You cannot remove the account owner.');
+        }
+
+        $member->delete();
+
+        return response()->json([
+            'message' => 'User removed.',
+        ]);
     }
 }

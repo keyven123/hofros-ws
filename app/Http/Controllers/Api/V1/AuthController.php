@@ -42,6 +42,10 @@ class AuthController extends Controller
             throw new InvalidCredentialsException();
         }
 
+        if ($user->is_platform_admin || $user->is_marketing) {
+            throw new InvalidCredentialsException();
+        }
+
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([

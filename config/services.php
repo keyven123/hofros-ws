@@ -35,4 +35,12 @@ return [
         ],
     ],
 
+    'paymongo' => [
+        'secret_key' => env('PAYMONGO_SECRET_KEY'),
+        'public_key' => env('PAYMONGO_PUBLIC_KEY'),
+        'webhook_secret' => env('PAYMONGO_WEBHOOK_SECRET'),
+        'env' => env('PAYMONGO_ENV', 'sandbox'),
+        'frontend_url' => env('FRONTEND_URL', 'http://localhost:3000'),
+    ],
+
 ];

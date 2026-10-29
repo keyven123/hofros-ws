@@ -47,4 +47,38 @@ class PublicDirectPortalRepository
             'slug' => $normalized,
         ];
     }
+
+    /**
+     * Resolve the merchant a customer can message. The design preview can
+     * message before the booking site is published.
+     *
+     * @return array{user: User, connection: ?BookingPortalConnection}
+     */
+    public function resolveBySlugForMessages(string $slug): array
+    {
+        $normalized = Str::lower(trim($slug));
+
+        $user = User::query()
+            ->whereNotNull('merchant_name')
+            ->get()
+            ->first(function (User $u) use ($normalized): bool {
+                $candidate = Str::slug((string) $u->merchant_name) ?: 'merchant';
+
+                return $candidate === $normalized;
+            });
+
+        if ($user === null) {
+            throw new NotFoundException();
+        }
+
+        $row = BookingPortalConnection::query()
+            ->where('user_uuid', $user->uuid)
+            ->where('portal_key', BookingPortalRepository::DIRECT_WEBSITE_KEY)
+            ->first();
+
+        return [
+            'user' => $user,
+            'connection' => $row,
+        ];
+    }
 }
