@@ -139,6 +139,23 @@ class AdminSubscriptionTest extends ApiTestCase
     }
 
     #[\PHPUnit\Framework\Attributes\Test]
+    public function testAdminCanUpdateFreeTrialDays(): void
+    {
+        $admin = User::factory()->create(['is_platform_admin' => true]);
+        $this->authenticate($admin);
+
+        $this->putJson('/api/v1/admin/subscriptions/free-trial', [
+            'free_trial_days' => 14,
+        ])
+            ->assertOk()
+            ->assertJsonPath('freeTrial.days', 14);
+
+        $this->getJson('/api/v1/public/pricing')
+            ->assertOk()
+            ->assertJsonPath('freeTrialDays', 14);
+    }
+
+    #[\PHPUnit\Framework\Attributes\Test]
     public function testMerchantCannotManageSubscriptions(): void
     {
         $merchant = User::factory()->create(['is_platform_admin' => false]);

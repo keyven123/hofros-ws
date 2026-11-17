@@ -115,6 +115,20 @@ class AdminSubscriptionController extends Controller
         return response()->json($this->payload());
     }
 
+    public function updateFreeTrial(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'free_trial_days' => ['required', 'integer', 'min:1', 'max:365'],
+        ]);
+
+        $settings = SubscriptionBillingSetting::current();
+        $settings->update([
+            'free_trial_days' => $validated['free_trial_days'],
+        ]);
+
+        return response()->json($this->payload());
+    }
+
     public function assign(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -326,6 +340,9 @@ class AdminSubscriptionController extends Controller
             'billingDiscounts' => [
                 'yearlyDiscountPercent' => (int) $billing->yearly_discount_percent,
                 'twoYearDiscountPercent' => (int) $billing->two_year_discount_percent,
+            ],
+            'freeTrial' => [
+                'days' => $billing->freeTrialDays(),
             ],
             'billingCycles' => $billing->billingCycles(),
         ];

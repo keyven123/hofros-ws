@@ -67,6 +67,7 @@ class PublicPricingController extends Controller
         return response()->json([
             'currency' => 'PHP',
             'billingCycles' => $billing->billingCycles(),
+            'freeTrialDays' => $billing->freeTrialDays(),
             'bands' => $plans->map($mapPlan)->values(),
             'uncapped' => $uncapped ? $mapPlan($uncapped) : null,
         ]);

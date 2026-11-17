@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Constants\GeneralConstants;
 use App\Models\Property;
 use App\Models\SubscriptionFeature;
 use App\Models\SubscriptionPlan;
@@ -13,6 +14,48 @@ use Illuminate\Support\Facades\Http;
 
 class SubscriptionBillingTest extends ApiTestCase
 {
+    #[\PHPUnit\Framework\Attributes\Test]
+    public function testFreeTrialInvoiceIsZeroWithCountdownAndEstimate(): void
+    {
+        $merchant = User::factory()->create(['is_platform_admin' => false]);
+        SubscriptionPlan::query()->update(['is_active' => false]);
+        SubscriptionPlan::query()->create([
+            'name' => 'Up to 10 rooms',
+            'slug' => 'up-to-10-trial',
+            'description' => 'Room baseline.',
+            'price_per_room' => 100,
+            'base_price' => 0,
+            'currency' => 'PHP',
+            'max_rooms' => 10,
+            'modules' => [],
+            'sort_order' => 1,
+            'is_active' => true,
+        ]);
+        SubscriptionFeature::query()->update(['monthly_price' => 0]);
+        SubscriptionFeature::query()->where('key', 'messages')->update(['monthly_price' => 500]);
+
+        app(SubscriptionBillingService::class)->startFreeTrial($merchant->fresh());
+        Unit::factory()->create([
+            'user_uuid' => $merchant->uuid,
+            'status' => Unit::STATUS_ACTIVE,
+        ]);
+
+        $token = $merchant->createToken('merchant')->plainTextToken;
+        $this->withToken($token);
+
+        $this->getJson('/api/v1/subscription')
+            ->assertOk()
+            ->assertJsonPath('invoice.total', 0)
+            ->assertJsonPath('invoice.roomsSubtotal', 0)
+            ->assertJsonPath('invoice.modulesSubtotal', 0)
+            ->assertJsonPath('invoice.trial.active', true)
+            ->assertJsonPath('invoice.trial.totalDays', GeneralConstants::FREE_TRIAL_DAYS)
+            ->assertJsonPath('invoice.trial.daysRemaining', GeneralConstants::FREE_TRIAL_DAYS)
+            ->assertJsonPath('invoice.postTrialEstimate.roomsSubtotal', 100)
+            ->assertJsonPath('invoice.postTrialEstimate.modulesSubtotal', 500)
+            ->assertJsonPath('invoice.postTrialEstimate.total', 600);
+    }
+
     #[\PHPUnit\Framework\Attributes\Test]
     public function testNextInvoiceFollowsActiveRoomsAndFeatureToggles(): void
     {

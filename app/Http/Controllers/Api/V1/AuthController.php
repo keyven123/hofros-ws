@@ -8,27 +8,32 @@ use App\Http\Repositories\UserRepository;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Http\Resources\UserResource;
+use App\Services\SubscriptionBillingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
-    public function __construct(protected UserRepository $userRepository)
-    {
+    public function __construct(
+        protected UserRepository $userRepository,
+        protected SubscriptionBillingService $billing,
+    ) {
     }
 
     public function register(RegisterRequest $request): JsonResponse
     {
         $user = $this->userRepository->create($request->validated());
+        $this->billing->startFreeTrial($user->fresh());
+        $trialDays = $this->billing->freeTrialDays();
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
-            'message' => 'Registration successful.',
+            'message' => "Registration successful. Your {$trialDays}-day free trial has started.",
             'token' => $token,
             'token_type' => 'Bearer',
-            'user' => (new UserResource($user))->resolve($request),
+            'user' => (new UserResource($user->fresh()))->resolve($request),
         ], Response::HTTP_CREATED);
     }
 

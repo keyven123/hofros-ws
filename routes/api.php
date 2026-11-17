@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\V1\CustomerAuthController;
 use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\PortalMessageController;
 use App\Http\Controllers\Api\V1\DashboardController;
+use App\Http\Controllers\Api\V1\GettingStartedController;
 use App\Http\Controllers\Api\V1\PublicDirectPortalBookingController;
 use App\Http\Controllers\Api\V1\PublicDirectPortalCalendarController;
 use App\Http\Controllers\Api\V1\PublicDirectPortalController;
@@ -101,6 +102,7 @@ Route::prefix('v1')->group(function (): void {
         Route::put('/subscriptions/plans/{plan}', [AdminSubscriptionController::class, 'updatePlan']);
         Route::put('/subscriptions/features', [AdminSubscriptionController::class, 'updateFeatures']);
         Route::put('/subscriptions/billing-discounts', [AdminSubscriptionController::class, 'updateBillingDiscounts']);
+        Route::put('/subscriptions/free-trial', [AdminSubscriptionController::class, 'updateFreeTrial']);
         Route::post('/subscriptions/assign', [AdminSubscriptionController::class, 'assign']);
     });
 
@@ -130,6 +132,8 @@ Route::prefix('v1')->group(function (): void {
         Route::put('/account/password', [AccountSettingsController::class, 'updatePassword']);
         Route::get('/account/payment', [PaymentSettingsController::class, 'show']);
         Route::put('/account/payment', [PaymentSettingsController::class, 'update']);
+        Route::get('/getting-started', [GettingStartedController::class, 'show']);
+        Route::post('/getting-started/dismiss', [GettingStartedController::class, 'dismiss']);
 
         Route::get('/configuration/team', [TeamMemberController::class, 'index']);
         Route::patch('/configuration/team/{id}', [TeamMemberController::class, 'update']);

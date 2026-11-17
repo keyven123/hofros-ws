@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Constants\GeneralConstants;
 use App\Models\MerchantSubscription;
+use App\Models\SubscriptionBillingSetting;
 use App\Models\SubscriptionFeature;
 use App\Models\SubscriptionFeatureToggle;
 use App\Models\SubscriptionPayment;
@@ -15,6 +17,45 @@ use Illuminate\Validation\ValidationException;
 
 class SubscriptionBillingService
 {
+    public function freeTrialDays(): int
+    {
+        try {
+            return SubscriptionBillingSetting::current()->freeTrialDays();
+        } catch (\Throwable) {
+            return GeneralConstants::FREE_TRIAL_DAYS;
+        }
+    }
+
+    public function startFreeTrial(User $merchant): ?MerchantSubscription
+    {
+        $trialDays = $this->freeTrialDays();
+        $trialEnds = ($merchant->created_at ?? now())->copy()->startOfDay()->addDays($trialDays);
+        $merchant->forceFill([
+            'trial_ends_at' => $trialEnds->toDateString(),
+            'account_status' => 'active',
+        ])->save();
+
+        $plan = $this->baselineForRoomCount(0);
+        if (! $plan) {
+            return null;
+        }
+
+        $subscription = MerchantSubscription::query()->updateOrCreate(
+            ['user_uuid' => $merchant->uuid],
+            [
+                'subscription_plan_uuid' => $plan->uuid,
+                'status' => 'trialing',
+                'current_period_start' => now()->toDateString(),
+                'current_period_end' => $trialEnds->toDateString(),
+            ],
+        );
+
+        $this->syncRoomUsage($merchant);
+        $this->activateAllFeatures($merchant->uuid);
+
+        return $subscription;
+    }
+
     public function startSubscription(User $merchant, SubscriptionPlan $plan): MerchantSubscription
     {
         $existing = MerchantSubscription::query()->where('user_uuid', $merchant->uuid)->first();
@@ -203,9 +244,13 @@ class SubscriptionBillingService
         }
 
         $dueOn = $this->openDueDate($merchant);
-        $overdue = now()->startOfDay()->gt($dueOn);
+        $onTrial = $merchant->onFreeTrial();
+        $overdue = ! $onTrial && now()->startOfDay()->gt($dueOn);
         $merchant->account_status = $overdue ? 'suspended' : 'active';
         $merchant->save();
+
+        $postTrialTotal = round($roomAmount + $addonTotal, 2);
+        $trialDaysRemaining = $merchant->trialDaysRemaining();
 
         return [
             'currency' => $plan->currency ?: 'PHP',
@@ -218,11 +263,25 @@ class SubscriptionBillingService
             'prorated' => false,
             'maxRooms' => $plan->max_rooms,
             'pricePerRoom' => $unitPrice,
-            'note' => 'Every active module is included. The due date is one month after registration, then the same date each month.',
+            'note' => $onTrial
+                ? 'Your free trial includes all modules. Billing starts when the trial ends.'
+                : 'Every active module is included. The due date is one month after registration, then the same date each month.',
             'items' => $items,
-            'roomsSubtotal' => $roomAmount,
-            'modulesSubtotal' => round($addonTotal, 2),
-            'total' => round($roomAmount + $addonTotal, 2),
+            'roomsSubtotal' => $onTrial ? 0.0 : $roomAmount,
+            'modulesSubtotal' => $onTrial ? 0.0 : round($addonTotal, 2),
+            'total' => $onTrial ? 0.0 : $postTrialTotal,
+            'trial' => [
+                'active' => $onTrial,
+                'totalDays' => $this->resolveTrialTotalDays($merchant),
+                'daysRemaining' => $trialDaysRemaining,
+                'endsOn' => $this->dateString($merchant->trial_ends_at),
+                'startedOn' => $merchant->created_at?->toDateString(),
+            ],
+            'postTrialEstimate' => [
+                'roomsSubtotal' => $roomAmount,
+                'modulesSubtotal' => round($addonTotal, 2),
+                'total' => $postTrialTotal,
+            ],
         ];
     }
 
@@ -252,18 +311,22 @@ class SubscriptionBillingService
 
     public function openDueDate(User $user): Carbon
     {
-        $anchor = ($user->created_at ?? now())->copy()->startOfDay();
-        $due = $anchor->copy()->addMonth();
         $lastPaid = SubscriptionPayment::query()
             ->where('user_uuid', $user->uuid)
             ->orderByDesc('due_on')
             ->first();
 
         if ($lastPaid?->due_on instanceof \DateTimeInterface) {
-            $due = Carbon::parse($lastPaid->due_on)->startOfDay()->addMonth();
+            return Carbon::parse($lastPaid->due_on)->startOfDay()->addMonth();
         }
 
-        return $due;
+        if ($user->trial_ends_at instanceof \DateTimeInterface) {
+            return $user->trial_ends_at->copy()->startOfDay();
+        }
+
+        $anchor = ($user->created_at ?? now())->copy()->startOfDay();
+
+        return $anchor->copy()->addMonth();
     }
 
     /**
@@ -306,6 +369,20 @@ class SubscriptionBillingService
         $subscription->current_period_start = now()->toDateString();
         $subscription->current_period_end = now()->addMonth()->toDateString();
         $subscription->save();
+    }
+
+    private function resolveTrialTotalDays(User $merchant): int
+    {
+        if ($merchant->trial_ends_at instanceof \DateTimeInterface && $merchant->created_at instanceof \DateTimeInterface) {
+            $span = (int) $merchant->created_at->copy()->startOfDay()
+                ->diffInDays($merchant->trial_ends_at->copy()->startOfDay());
+
+            if ($span > 0) {
+                return $span;
+            }
+        }
+
+        return $this->freeTrialDays();
     }
 
     private function dateString(mixed $value): ?string

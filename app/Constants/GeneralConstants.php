@@ -58,4 +58,7 @@ class GeneralConstants
     public const RATE_INTERVAL_DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
     public const WEEK_SCHEDULE_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+    /** Default free-trial length for new merchant accounts (days). */
+    public const FREE_TRIAL_DAYS = 30;
 }

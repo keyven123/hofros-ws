@@ -43,6 +43,8 @@ class User extends Authenticatable
         'is_platform_admin',
         'is_marketing',
         'account_status',
+        'trial_ends_at',
+        'getting_started_dismissed_at',
     ];
 
     /**
@@ -67,7 +69,31 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_platform_admin' => 'boolean',
             'is_marketing' => 'boolean',
+            'trial_ends_at' => 'date',
+            'getting_started_dismissed_at' => 'datetime',
         ];
+    }
+
+    public function onFreeTrial(?\DateTimeInterface $asOf = null): bool
+    {
+        if (! $this->trial_ends_at) {
+            return false;
+        }
+
+        $day = \Illuminate\Support\Carbon::parse($asOf ?? now())->startOfDay();
+
+        return $day->lte($this->trial_ends_at->copy()->startOfDay());
+    }
+
+    public function trialDaysRemaining(?\DateTimeInterface $asOf = null): int
+    {
+        if (! $this->onFreeTrial($asOf)) {
+            return 0;
+        }
+
+        $day = \Illuminate\Support\Carbon::parse($asOf ?? now())->startOfDay();
+
+        return (int) $day->diffInDays($this->trial_ends_at->copy()->startOfDay());
     }
 
     public function scopeMerchants($query)
