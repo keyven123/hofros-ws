@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\SubscriptionBillingSetting;
 use App\Models\SubscriptionFeature;
 use App\Models\SubscriptionFeatureToggle;
 use App\Models\SubscriptionPlan;
@@ -94,6 +95,22 @@ class AdminSubscriptionController extends Controller
                 ->where('is_active', true)
                 ->update(['monthly_price' => $row['monthly_price']]);
         }
+
+        return response()->json($this->payload());
+    }
+
+    public function updateBillingDiscounts(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'yearly_discount_percent' => ['required', 'integer', 'min:0', 'max:95'],
+            'two_year_discount_percent' => ['required', 'integer', 'min:0', 'max:95'],
+        ]);
+
+        $settings = SubscriptionBillingSetting::current();
+        $settings->update([
+            'yearly_discount_percent' => $validated['yearly_discount_percent'],
+            'two_year_discount_percent' => $validated['two_year_discount_percent'],
+        ]);
 
         return response()->json($this->payload());
     }
@@ -296,6 +313,8 @@ class AdminSubscriptionController extends Controller
                 'currency' => $feature->currency,
             ]);
 
+        $billing = SubscriptionBillingSetting::current();
+
         return [
             'modules' => collect(SubscriptionPlan::MODULES)->map(fn (string $label, string $id) => [
                 'id' => $id,
@@ -304,6 +323,11 @@ class AdminSubscriptionController extends Controller
             'features' => $features,
             'plans' => $plans,
             'merchants' => $merchants,
+            'billingDiscounts' => [
+                'yearlyDiscountPercent' => (int) $billing->yearly_discount_percent,
+                'twoYearDiscountPercent' => (int) $billing->two_year_discount_percent,
+            ],
+            'billingCycles' => $billing->billingCycles(),
         ];
     }
 

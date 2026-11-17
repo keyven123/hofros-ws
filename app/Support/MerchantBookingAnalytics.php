@@ -148,8 +148,11 @@ final class MerchantBookingAnalytics
             'airbnb' => ['key' => 'airbnb', 'label' => 'Airbnb'],
             'booking_com' => ['key' => 'booking_com', 'label' => 'Booking.com'],
             'booking.com' => ['key' => 'booking_com', 'label' => 'Booking.com'],
-            'expedia' => ['key' => 'expedia', 'label' => 'Expedia'],
-            'vrbo' => ['key' => 'vrbo', 'label' => 'VRBO'],
+            'ticketoc' => ['key' => 'ticketoc', 'label' => 'Ticketoc'],
+            'agoda' => ['key' => 'agoda', 'label' => 'Agoda'],
+            // Legacy source values (pre Ticketoc / Agoda rename)
+            'expedia' => ['key' => 'ticketoc', 'label' => 'Ticketoc'],
+            'vrbo' => ['key' => 'agoda', 'label' => 'Agoda'],
         ];
         if (isset($map[$s])) {
             return $map[$s];

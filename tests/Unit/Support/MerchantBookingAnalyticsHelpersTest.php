@@ -39,8 +39,10 @@ class MerchantBookingAnalyticsHelpersTest extends TestCase
         $this->assertSame(['key' => 'airbnb', 'label' => 'Airbnb'], MerchantBookingAnalytics::mapSourceKeyLabel('airbnb'));
         $this->assertSame(['key' => 'booking_com', 'label' => 'Booking.com'], MerchantBookingAnalytics::mapSourceKeyLabel('booking.com'));
         $this->assertSame(['key' => 'booking_com', 'label' => 'Booking.com'], MerchantBookingAnalytics::mapSourceKeyLabel('booking_com'));
-        $this->assertSame(['key' => 'expedia', 'label' => 'Expedia'], MerchantBookingAnalytics::mapSourceKeyLabel('expedia'));
-        $this->assertSame(['key' => 'vrbo', 'label' => 'VRBO'], MerchantBookingAnalytics::mapSourceKeyLabel('vrbo'));
+        $this->assertSame(['key' => 'ticketoc', 'label' => 'Ticketoc'], MerchantBookingAnalytics::mapSourceKeyLabel('ticketoc'));
+        $this->assertSame(['key' => 'agoda', 'label' => 'Agoda'], MerchantBookingAnalytics::mapSourceKeyLabel('agoda'));
+        $this->assertSame(['key' => 'ticketoc', 'label' => 'Ticketoc'], MerchantBookingAnalytics::mapSourceKeyLabel('expedia'));
+        $this->assertSame(['key' => 'agoda', 'label' => 'Agoda'], MerchantBookingAnalytics::mapSourceKeyLabel('vrbo'));
     }
 
     #[\PHPUnit\Framework\Attributes\Test]

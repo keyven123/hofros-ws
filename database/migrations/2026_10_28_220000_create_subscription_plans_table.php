@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\SubscriptionPlanCatalog;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -32,46 +33,7 @@ return new class extends Migration
         });
 
         $now = now();
-        $plans = [
-            [
-                'name' => 'Free',
-                'slug' => 'free',
-                'description' => 'A starting plan for a new property.',
-                'price_per_room' => 0,
-                'max_rooms' => 2,
-                'modules' => ['dashboard', 'calendar', 'bookings', 'configuration'],
-                'sort_order' => 1,
-            ],
-            [
-                'name' => 'Regular',
-                'slug' => 'regular',
-                'description' => 'Reservations, discounts, and guest messages.',
-                'price_per_room' => 149,
-                'max_rooms' => 8,
-                'modules' => ['dashboard', 'calendar', 'bookings', 'configuration', 'discount', 'messages'],
-                'sort_order' => 2,
-            ],
-            [
-                'name' => 'Advance',
-                'slug' => 'advance',
-                'description' => 'Adds customers, analytics, and the booking website.',
-                'price_per_room' => 349,
-                'max_rooms' => 25,
-                'modules' => ['dashboard', 'calendar', 'bookings', 'configuration', 'discount', 'messages', 'customers', 'analytics', 'portals'],
-                'sort_order' => 3,
-            ],
-            [
-                'name' => 'Enterprise',
-                'slug' => 'enterprise',
-                'description' => 'Every module, with no room cap.',
-                'price_per_room' => 699,
-                'max_rooms' => null,
-                'modules' => ['dashboard', 'calendar', 'bookings', 'configuration', 'discount', 'messages', 'customers', 'analytics', 'portals', 'advanced'],
-                'sort_order' => 4,
-            ],
-        ];
-
-        foreach ($plans as $plan) {
+        foreach (SubscriptionPlanCatalog::baselines() as $index => $plan) {
             DB::table('subscription_plans')->insert([
                 'uuid' => (string) Str::uuid(),
                 'name' => $plan['name'],
@@ -80,8 +42,8 @@ return new class extends Migration
                 'price_per_room' => $plan['price_per_room'],
                 'currency' => 'PHP',
                 'max_rooms' => $plan['max_rooms'],
-                'modules' => json_encode($plan['modules']),
-                'sort_order' => $plan['sort_order'],
+                'modules' => json_encode([]),
+                'sort_order' => $index + 1,
                 'is_active' => true,
                 'created_at' => $now,
                 'updated_at' => $now,

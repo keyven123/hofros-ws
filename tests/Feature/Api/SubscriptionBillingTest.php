@@ -82,7 +82,7 @@ class SubscriptionBillingTest extends ApiTestCase
     {
         $merchant = User::factory()->create(['is_platform_admin' => false]);
         SubscriptionPlan::query()->update(['is_active' => false]);
-        SubscriptionPlan::query()->where('slug', 'regular')->update([
+        SubscriptionPlan::query()->where('max_rooms', 8)->update([
             'is_active' => true,
             'price_per_room' => 149,
             'max_rooms' => 20,

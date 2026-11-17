@@ -32,6 +32,7 @@ use App\Http\Controllers\Api\V1\Configuration\UnitController;
 use App\Http\Controllers\Api\V1\Configuration\UnitRateIntervalController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\MerchantSubscriptionController;
+use App\Http\Controllers\Api\V1\PublicPricingController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function (): \Illuminate\Http\JsonResponse {
@@ -50,6 +51,7 @@ Route::get('/health', HealthController::class);
 
 Route::prefix('v1')->group(function (): void {
     Route::get('/health', HealthController::class);
+    Route::get('/public/pricing', PublicPricingController::class);
     Route::get('/public/direct-portals/{slug}', [PublicDirectPortalController::class, 'show'])
         ->where('slug', '[a-z0-9-]+');
     Route::get('/public/direct-portals/{slug}/calendar', [PublicDirectPortalCalendarController::class, 'show'])
@@ -98,6 +100,7 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/subscriptions/plans', [AdminSubscriptionController::class, 'storePlan']);
         Route::put('/subscriptions/plans/{plan}', [AdminSubscriptionController::class, 'updatePlan']);
         Route::put('/subscriptions/features', [AdminSubscriptionController::class, 'updateFeatures']);
+        Route::put('/subscriptions/billing-discounts', [AdminSubscriptionController::class, 'updateBillingDiscounts']);
         Route::post('/subscriptions/assign', [AdminSubscriptionController::class, 'assign']);
     });
 

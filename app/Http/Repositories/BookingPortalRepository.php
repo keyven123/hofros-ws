@@ -17,8 +17,8 @@ class BookingPortalRepository
         return [
             'direct_website' => ['name' => 'Direct Website', 'tint' => 'direct'],
             'booking_com' => ['name' => 'Booking.com', 'tint' => 'blue'],
-            'expedia' => ['name' => 'Expedia', 'tint' => 'yellow'],
-            'vrbo' => ['name' => 'VRBO', 'tint' => 'slate'],
+            'ticketoc' => ['name' => 'Ticketoc', 'tint' => 'yellow'],
+            'agoda' => ['name' => 'Agoda', 'tint' => 'slate'],
             'tripadvisor' => ['name' => 'TripAdvisor', 'tint' => 'slate'],
             'airbnb' => ['name' => 'Airbnb', 'tint' => 'rose'],
         ];
