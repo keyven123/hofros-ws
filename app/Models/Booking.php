@@ -38,6 +38,7 @@ class Booking extends Model
 
     public const SOURCE_DIRECT_PORTAL = 'direct_portal';
     public const SOURCE_MANUAL = 'manual';
+    public const SOURCE_MOBILE_APP = 'mobile_app';
 
     protected $fillable = [
         'user_uuid',
@@ -127,5 +128,10 @@ class Booking extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(BookingPayment::class)->orderByDesc('created_at');
+    }
+
+    public function bookingPromotions(): HasMany
+    {
+        return $this->hasMany(BookingPromotion::class, 'booking_uuid', 'uuid');
     }
 }

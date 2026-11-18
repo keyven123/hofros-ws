@@ -43,4 +43,8 @@ return [
         'frontend_url' => env('FRONTEND_URL', 'http://localhost:3000'),
     ],
 
+    'hofros_mobile' => [
+        'app_key' => env('HOFROS_MOBILE_APP_KEY'),
+    ],
+
 ];

@@ -9,6 +9,8 @@ use App\Http\Requests\PublicDirectPortal\PublicQuoteRequest;
 use App\Models\Unit;
 use App\Support\BookingStayConflict;
 use App\Support\DirectPortalPromoCode;
+use App\Support\MobileAppClient;
+use App\Support\PromotionPricingEngine;
 use App\Support\UnitStayPricing;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Carbon;
@@ -63,24 +65,43 @@ class PublicDirectPortalQuoteController extends Controller
         }
 
         $subtotal = round($sum, 2);
+        $bookingSource = MobileAppClient::bookingSource($request);
+        $promotion = PromotionPricingEngine::apply(
+            $user->uuid,
+            $subtotal,
+            (int) $nights,
+            $checkIn,
+            ['bookingSource' => $bookingSource],
+        );
+        $afterPromotion = (float) $promotion['finalAmount'];
+
         $promo = DirectPortalPromoCode::resolve(
             $user->uuid,
             $validated['promoCode'] ?? null,
             (int) $nights,
-            $subtotal,
+            $afterPromotion,
         );
         if (! $promo['ok']) {
             throw new BookingValidationException((string) $promo['message']);
         }
 
+        $promoDiscount = (float) $promo['discountAmount'];
+        $promotionDiscount = (float) $promotion['discountAmount'];
+        $totalDiscount = round($promotionDiscount + $promoDiscount, 2);
+
         return response()->json([
             'subtotalPrice' => $subtotal,
-            'discountAmount' => (float) $promo['discountAmount'],
+            'promotionDiscountAmount' => $promotionDiscount,
+            'promotionName' => $promotion['promotionName'],
+            'promotionType' => $promotion['promotionType'],
+            'promoCodeDiscountAmount' => $promoDiscount,
+            'discountAmount' => $totalDiscount,
             'totalPrice' => (float) $promo['discountedTotal'],
             'currency' => (string) $currency,
             'nights' => (int) $nights,
             'unitCount' => count($bookUnits),
             'promoCode' => $promo['promo']?->code,
+            'bookingSource' => $bookingSource,
         ]);
     }
 }

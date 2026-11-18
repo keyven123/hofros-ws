@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\V1\PublicDirectPortalCalendarController;
 use App\Http\Controllers\Api\V1\PublicDirectPortalController;
 use App\Http\Controllers\Api\V1\PublicDirectPortalQuoteController;
 use App\Http\Controllers\Api\V1\PromoCodeController;
+use App\Http\Controllers\Api\V1\PromotionController;
 use App\Http\Controllers\Api\V1\UnitDateBlockController;
 use App\Http\Controllers\Api\V1\UnitDiscountController;
 use App\Http\Controllers\Api\V1\Configuration\NotificationSettingsController;
@@ -183,6 +184,12 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/discounts/unit-discounts', [UnitDiscountController::class, 'store']);
         Route::put('/discounts/unit-discounts/{id}', [UnitDiscountController::class, 'update']);
         Route::delete('/discounts/unit-discounts/{id}', [UnitDiscountController::class, 'destroy']);
+
+        Route::get('/discounts/promotions', [PromotionController::class, 'index']);
+        Route::post('/discounts/promotions', [PromotionController::class, 'store']);
+        Route::put('/discounts/promotions/{id}', [PromotionController::class, 'update']);
+        Route::delete('/discounts/promotions/{id}', [PromotionController::class, 'destroy']);
+        Route::post('/discounts/promotions/{id}/toggle', [PromotionController::class, 'toggle']);
 
         Route::get('/subscription', [MerchantSubscriptionController::class, 'show']);
         Route::get('/subscription/upcoming-invoice', [MerchantSubscriptionController::class, 'upcomingInvoice']);

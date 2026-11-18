@@ -8,10 +8,13 @@ use App\Http\Repositories\BookingRepository;
 use App\Http\Repositories\PublicDirectPortalRepository;
 use App\Http\Requests\PublicDirectPortal\PublicCreateBookingRequest;
 use App\Models\Booking;
+use App\Models\BookingPromotion;
 use App\Models\PromoCode;
 use App\Models\Unit;
 use App\Support\BookingStayConflict;
 use App\Support\DirectPortalPromoCode;
+use App\Support\MobileAppClient;
+use App\Support\PromotionPricingEngine;
 use App\Support\UnitStayPricing;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
@@ -88,18 +91,32 @@ class PublicDirectPortalBookingController extends Controller
             ];
         }
 
+        $bookingSource = MobileAppClient::bookingSource($request);
+        $promotion = PromotionPricingEngine::apply(
+            $user->uuid,
+            round($subtotal, 2),
+            (int) $nights,
+            $checkIn,
+            ['bookingSource' => $bookingSource],
+        );
+        $promotionDiscount = (float) $promotion['discountAmount'];
+        $afterPromotion = (float) $promotion['finalAmount'];
+
         $promo = DirectPortalPromoCode::resolve(
             $user->uuid,
             $validated['promoCode'] ?? null,
             (int) $nights,
-            round($subtotal, 2),
+            $afterPromotion,
         );
         if (! $promo['ok']) {
             throw new BookingValidationException((string) $promo['message']);
         }
 
-        $discountAmount = (float) $promo['discountAmount'];
+        $promoDiscount = (float) $promo['discountAmount'];
+        $discountAmount = round($promotionDiscount + $promoDiscount, 2);
         $promoEntity = $promo['promo'];
+        $selectedPromotion = $promotion['promotion'];
+
         if ($discountAmount > 0.0 && $subtotal > 0.0) {
             $remaining = $discountAmount;
             $count = count($pricedRows);
@@ -109,28 +126,51 @@ class PublicDirectPortalBookingController extends Controller
                     ? $remaining
                     : round($discountAmount * ($raw / $subtotal), 2);
                 $share = min($remaining, max(0.0, $share));
+                $row['original'] = $raw;
+                $row['discountShare'] = $share;
                 $row['total'] = round(max(0.0, $raw - $share), 2);
                 $remaining = round(max(0.0, $remaining - $share), 2);
             }
             unset($row);
             if ($remaining > 0.0 && $count > 0) {
                 $last = $count - 1;
+                $pricedRows[$last]['discountShare'] = round((float) ($pricedRows[$last]['discountShare'] ?? 0) + $remaining, 2);
                 $pricedRows[$last]['total'] = round(max(0.0, (float) $pricedRows[$last]['total'] - $remaining), 2);
             }
+        } else {
+            foreach ($pricedRows as &$row) {
+                $row['original'] = (float) $row['total'];
+                $row['discountShare'] = 0.0;
+            }
+            unset($row);
         }
 
         $batchId = (string) Str::uuid();
         $multi = count($bookUnits) > 1;
 
         try {
-            $created = DB::transaction(function () use ($user, $pricedRows, $checkIn, $checkOut, $adults, $children, $validated, $batchId, $multi, $promoEntity): array {
+            $created = DB::transaction(function () use (
+                $user,
+                $pricedRows,
+                $checkIn,
+                $checkOut,
+                $adults,
+                $children,
+                $validated,
+                $batchId,
+                $multi,
+                $promoEntity,
+                $selectedPromotion,
+                $promotion,
+                $bookingSource,
+            ): array {
                 $out = [];
                 foreach ($pricedRows as $row) {
                     $bookUnit = $row['unit'];
                     $total = $row['total'];
                     $reference = $this->bookingRepository->uniqueReference();
 
-                    $out[] = $this->bookingRepository->create([
+                    $booking = $this->bookingRepository->create([
                         'user_uuid' => $user->uuid,
                         'unit_uuid' => $bookUnit->uuid,
                         'reference' => $reference,
@@ -143,11 +183,36 @@ class PublicDirectPortalBookingController extends Controller
                         'children' => $children,
                         'total_price' => $total,
                         'currency' => $bookUnit->currency,
-                        'source' => Booking::SOURCE_DIRECT_PORTAL,
+                        'source' => $bookingSource,
                         'status' => Booking::STATUS_PENDING,
                         'notes' => null,
                         'portal_batch_id' => $multi ? $batchId : null,
                     ]);
+
+                    if ($selectedPromotion !== null && (float) $promotion['discountAmount'] > 0) {
+                        $original = round((float) ($row['original'] ?? $total), 2);
+                        $baseTotal = max(0.01, (float) array_sum(array_map(
+                            static fn (array $r): float => (float) ($r['original'] ?? 0),
+                            $pricedRows
+                        )));
+                        $unitPromotionShare = round(((float) $promotion['discountAmount']) * ($original / $baseTotal), 2);
+                        $unitPromotionShare = min($original, max(0.0, $unitPromotionShare));
+
+                        BookingPromotion::query()->create([
+                            'booking_uuid' => $booking->uuid,
+                            'promotion_uuid' => $selectedPromotion->uuid,
+                            'promotion_type' => $selectedPromotion->promotion_type,
+                            'promotion_name' => $selectedPromotion->displayName(),
+                            'original_amount' => $original,
+                            'discount_amount' => $unitPromotionShare,
+                            'final_amount' => round(max(0.0, $original - $unitPromotionShare), 2),
+                            'discount_type' => $selectedPromotion->discount_type,
+                            'discount_value' => $selectedPromotion->discount_value,
+                            'selection_reason' => $promotion['selectionReason'],
+                        ]);
+                    }
+
+                    $out[] = $booking;
                 }
 
                 if ($promoEntity !== null) {
@@ -174,7 +239,10 @@ class PublicDirectPortalBookingController extends Controller
             $created,
             round($subtotal, 2),
             $discountAmount,
-            $promoEntity?->code
+            $promoEntity?->code,
+            $promotionDiscount,
+            $promotion['promotionName'],
+            $promoDiscount,
         ), Response::HTTP_CREATED);
     }
 
@@ -182,8 +250,15 @@ class PublicDirectPortalBookingController extends Controller
      * @param  list<Booking>  $bookings
      * @return array<string, mixed>
      */
-    private function toPublicPayload(array $bookings, float $subtotal, float $discountAmount, ?string $promoCode): array
-    {
+    private function toPublicPayload(
+        array $bookings,
+        float $subtotal,
+        float $discountAmount,
+        ?string $promoCode,
+        float $promotionDiscount = 0.0,
+        ?string $promotionName = null,
+        float $promoCodeDiscount = 0.0,
+    ): array {
         $first = $bookings[0];
         $refs = array_map(static fn (Booking $b): string => (string) $b->reference, $bookings);
         $totalAmount = round(array_sum(array_map(static fn (Booking $b): float => (float) $b->total_price, $bookings)), 2);
@@ -193,6 +268,9 @@ class PublicDirectPortalBookingController extends Controller
             'references' => $refs,
             'unitCount' => count($bookings),
             'subtotalAmount' => round($subtotal, 2),
+            'promotionDiscountAmount' => round($promotionDiscount, 2),
+            'promotionName' => $promotionName,
+            'promoCodeDiscountAmount' => round($promoCodeDiscount, 2),
             'discountAmount' => round($discountAmount, 2),
             'totalAmount' => $totalAmount,
             'promoCode' => $promoCode,
