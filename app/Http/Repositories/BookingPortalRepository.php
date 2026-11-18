@@ -9,6 +9,8 @@ class BookingPortalRepository
 {
     public const DIRECT_WEBSITE_KEY = 'direct_website';
 
+    public const TICKETOC_KEY = 'ticketoc';
+
     /**
      * @return array<string, array{name: string, tint: string}>
      */
@@ -16,11 +18,11 @@ class BookingPortalRepository
     {
         return [
             'direct_website' => ['name' => 'Direct Website', 'tint' => 'direct'],
-            'booking_com' => ['name' => 'Booking.com', 'tint' => 'blue'],
             'ticketoc' => ['name' => 'Ticketoc', 'tint' => 'yellow'],
-            'agoda' => ['name' => 'Agoda', 'tint' => 'slate'],
-            'tripadvisor' => ['name' => 'TripAdvisor', 'tint' => 'slate'],
             'airbnb' => ['name' => 'Airbnb', 'tint' => 'rose'],
+            'agoda' => ['name' => 'Agoda', 'tint' => 'slate'],
+            'tripadvisor' => ['name' => 'Trip.com', 'tint' => 'trip'],
+            'booking_com' => ['name' => 'Booking.com', 'tint' => 'blue'],
         ];
     }
 
@@ -81,6 +83,13 @@ class BookingPortalRepository
         $this->ensureRowsForUser($userUuid);
 
         return $this->findOrFail($userUuid, self::DIRECT_WEBSITE_KEY);
+    }
+
+    public function ticketocRow(string $userUuid): BookingPortalConnection
+    {
+        $this->ensureRowsForUser($userUuid);
+
+        return $this->findOrFail($userUuid, self::TICKETOC_KEY);
     }
 
     /**

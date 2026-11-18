@@ -7,22 +7,31 @@ use App\Http\Controllers\Controller;
 use App\Http\Repositories\BookingPortalRepository;
 use App\Http\Requests\BookingPortal\SaveDirectWebsiteContentRequest;
 use App\Http\Requests\BookingPortal\SaveDirectWebsiteDesignRequest;
+use App\Http\Requests\BookingPortal\SaveOtaConnectionRequest;
+use App\Http\Requests\BookingPortal\SaveTicketocConnectionRequest;
 use App\Http\Requests\BookingPortal\SetDirectWebsiteLiveRequest;
 use App\Http\Requests\BookingPortal\UpdatePortalActiveRequest;
 use App\Http\Requests\BookingPortal\UploadHeroRequest;
 use App\Http\Resources\BookingPortalChannelResource;
 use App\Models\BookingPortalConnection;
+use App\Services\Ota\OtaPortalConnectionService;
+use App\Services\Ticketoc\TicketocConnectionService;
 use App\Support\GuestPortalLayout;
 use App\Support\GuestPortalUnits;
+use App\Support\OtaPortalSchemas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 class BookingPortalController extends Controller
 {
-    public function __construct(protected BookingPortalRepository $portalRepository)
-    {
+    public function __construct(
+        protected BookingPortalRepository $portalRepository,
+        protected TicketocConnectionService $ticketocConnection,
+        protected OtaPortalConnectionService $otaConnection,
+    ) {
     }
 
     public function index(Request $request): JsonResponse
@@ -226,6 +235,19 @@ class BookingPortalController extends Controller
             throw new BookingPortalException('Connect this channel before syncing.');
         }
 
+        if ($portalKey === BookingPortalRepository::TICKETOC_KEY) {
+            try {
+                $row = $this->ticketocConnection->sync($request->user()->uuid);
+            } catch (RuntimeException $e) {
+                throw new BookingPortalException($e->getMessage());
+            }
+
+            return response()->json([
+                'message' => 'Ticketoc sync completed.',
+                'channel' => (new BookingPortalChannelResource($row))->resolve($request),
+            ]);
+        }
+
         $row->update([
             'last_synced_at' => Carbon::now(),
             'has_sync_issue' => false,
@@ -243,6 +265,14 @@ class BookingPortalController extends Controller
 
         if ($portalKey === BookingPortalRepository::DIRECT_WEBSITE_KEY) {
             throw new BookingPortalException('Use “Build a direct website” in the app to open the website builder and copy your guest link.');
+        }
+
+        if ($portalKey === BookingPortalRepository::TICKETOC_KEY) {
+            throw new BookingPortalException('Open the Ticketoc integration page to enter Ticketoc API credentials.');
+        }
+
+        if (OtaPortalSchemas::isSupported($portalKey)) {
+            throw new BookingPortalException('Open the '.$portalKey.' integration page to enter OTA API credentials.');
         }
 
         $row = $this->portalRepository->findOrFail($request->user()->uuid, $portalKey);
@@ -266,6 +296,257 @@ class BookingPortalController extends Controller
             'message' => 'Channel connected. Complete OAuth or API credentials in production.',
             'channel' => (new BookingPortalChannelResource($row->fresh()))->resolve($request),
         ]);
+    }
+
+    public function ticketocSettings(Request $request): JsonResponse
+    {
+        $row = $this->portalRepository->ticketocRow($request->user()->uuid);
+
+        return response()->json([
+            'settings' => $this->ticketocConnection->settingsPayload($row),
+            'channel' => (new BookingPortalChannelResource($row))->resolve($request),
+        ]);
+    }
+
+    public function ticketocTest(SaveTicketocConnectionRequest $request): JsonResponse
+    {
+        $credentials = $request->credentials();
+
+        try {
+            $result = $this->ticketocConnection->test(
+                $credentials['email'],
+                $credentials['password'],
+            );
+        } catch (RuntimeException $e) {
+            throw new BookingPortalException($e->getMessage());
+        }
+
+        return response()->json([
+            'message' => 'Ticketoc credentials are valid.',
+            'result' => $result,
+        ]);
+    }
+
+    public function ticketocConnect(SaveTicketocConnectionRequest $request): JsonResponse
+    {
+        $credentials = $request->credentials();
+
+        try {
+            $row = $this->ticketocConnection->connect(
+                $request->user()->uuid,
+                $credentials['email'],
+                $credentials['password'],
+            );
+        } catch (RuntimeException $e) {
+            throw new BookingPortalException($e->getMessage());
+        }
+
+        return response()->json([
+            'message' => 'Ticketoc connected. Hofros can now sync stays from this account.',
+            'settings' => $this->ticketocConnection->settingsPayload($row),
+            'channel' => (new BookingPortalChannelResource($row))->resolve($request),
+        ]);
+    }
+
+    public function ticketocDisconnect(Request $request): JsonResponse
+    {
+        $row = $this->ticketocConnection->disconnect($request->user()->uuid);
+
+        return response()->json([
+            'message' => 'Ticketoc disconnected.',
+            'settings' => $this->ticketocConnection->settingsPayload($row),
+            'channel' => (new BookingPortalChannelResource($row))->resolve($request),
+        ]);
+    }
+
+    public function otaSettings(Request $request, string $portalKey): JsonResponse
+    {
+        $this->assertOtaPortalKey($portalKey);
+        $this->portalRepository->ensureRowsForUser($request->user()->uuid);
+        $row = $this->portalRepository->findOrFail($request->user()->uuid, $portalKey);
+
+        return response()->json([
+            'settings' => $this->otaConnection->settingsPayload($row),
+            'channel' => (new BookingPortalChannelResource($row))->resolve($request),
+        ]);
+    }
+
+    public function otaTest(SaveOtaConnectionRequest $request, string $portalKey): JsonResponse
+    {
+        $this->assertOtaPortalKey($portalKey);
+        $this->portalRepository->ensureRowsForUser($request->user()->uuid);
+        $row = $this->portalRepository->findOrFail($request->user()->uuid, $portalKey);
+
+        try {
+            $result = $this->otaConnection->test($portalKey, $request->credentialInput(), $row);
+        } catch (RuntimeException $e) {
+            throw new BookingPortalException($e->getMessage());
+        }
+
+        return response()->json([
+            'message' => OtaPortalSchemas::for($portalKey)['name'].' credentials look valid.',
+            'result' => $result,
+        ]);
+    }
+
+    public function otaConnect(SaveOtaConnectionRequest $request, string $portalKey): JsonResponse
+    {
+        $this->assertOtaPortalKey($portalKey);
+        $this->portalRepository->ensureRowsForUser($request->user()->uuid);
+
+        try {
+            $row = $this->otaConnection->connect($request->user()->uuid, $portalKey, $request->credentialInput());
+        } catch (RuntimeException $e) {
+            throw new BookingPortalException($e->getMessage());
+        }
+
+        return response()->json([
+            'message' => OtaPortalSchemas::for($portalKey)['name'].' connected. Hofros can sync this channel once partner APIs are live.',
+            'settings' => $this->otaConnection->settingsPayload($row),
+            'channel' => (new BookingPortalChannelResource($row))->resolve($request),
+        ]);
+    }
+
+    public function otaDisconnect(Request $request, string $portalKey): JsonResponse
+    {
+        $this->assertOtaPortalKey($portalKey);
+        $this->portalRepository->ensureRowsForUser($request->user()->uuid);
+
+        try {
+            $row = $this->otaConnection->disconnect($request->user()->uuid, $portalKey);
+        } catch (RuntimeException $e) {
+            throw new BookingPortalException($e->getMessage());
+        }
+
+        return response()->json([
+            'message' => OtaPortalSchemas::for($portalKey)['name'].' disconnected.',
+            'settings' => $this->otaConnection->settingsPayload($row),
+            'channel' => (new BookingPortalChannelResource($row))->resolve($request),
+        ]);
+    }
+
+    public function airbnbAccommodations(Request $request): JsonResponse
+    {
+        $this->portalRepository->ensureRowsForUser($request->user()->uuid);
+        $selectedUserId = $request->query('userId');
+        $selectedUserId = is_string($selectedUserId) ? trim($selectedUserId) : null;
+
+        try {
+            $payload = $this->otaConnection->airbnbAccommodations(
+                $request->user()->uuid,
+                $selectedUserId !== '' ? $selectedUserId : null
+            );
+        } catch (RuntimeException $e) {
+            throw new BookingPortalException($e->getMessage());
+        }
+
+        return response()->json($payload);
+    }
+
+    public function airbnbReloadAccommodations(Request $request): JsonResponse
+    {
+        $this->portalRepository->ensureRowsForUser($request->user()->uuid);
+        $validated = $request->validate([
+            'userId' => ['nullable', 'string', 'regex:/^\d{5,20}$/'],
+        ]);
+
+        try {
+            $payload = $this->otaConnection->reloadAirbnbListings(
+                $request->user()->uuid,
+                $validated['userId'] ?? null
+            );
+        } catch (RuntimeException $e) {
+            throw new BookingPortalException($e->getMessage());
+        }
+
+        return response()->json(array_merge([
+            'message' => 'Airbnb accommodations reloaded.',
+        ], $payload));
+    }
+
+    public function airbnbSaveAccommodations(Request $request): JsonResponse
+    {
+        $this->portalRepository->ensureRowsForUser($request->user()->uuid);
+        $validated = $request->validate([
+            'userId' => ['nullable', 'string', 'regex:/^\d{5,20}$/'],
+            'mappings' => ['required', 'array'],
+            'mappings.*' => ['nullable', 'string', 'max:64'],
+        ]);
+
+        try {
+            $payload = $this->otaConnection->saveAirbnbMappings(
+                $request->user()->uuid,
+                $validated['mappings'],
+                $validated['userId'] ?? null
+            );
+        } catch (RuntimeException $e) {
+            throw new BookingPortalException($e->getMessage());
+        }
+
+        return response()->json(array_merge([
+            'message' => 'Airbnb accommodation mappings saved.',
+        ], $payload));
+    }
+
+    public function airbnbAddHost(Request $request): JsonResponse
+    {
+        $this->portalRepository->ensureRowsForUser($request->user()->uuid);
+        $validated = $request->validate([
+            'userId' => ['required', 'string', 'regex:/^\d{5,20}$/'],
+        ]);
+
+        try {
+            $payload = $this->otaConnection->addAirbnbHost(
+                $request->user()->uuid,
+                $validated['userId']
+            );
+        } catch (RuntimeException $e) {
+            throw new BookingPortalException($e->getMessage());
+        }
+
+        return response()->json(array_merge([
+            'message' => 'Airbnb User ID added and listings captured.',
+        ], $payload));
+    }
+
+    public function airbnbSetHostActive(Request $request, string $hostUserId): JsonResponse
+    {
+        $this->portalRepository->ensureRowsForUser($request->user()->uuid);
+        $validated = $request->validate([
+            'isActive' => ['required', 'boolean'],
+        ]);
+
+        try {
+            $payload = $this->otaConnection->setAirbnbHostActive(
+                $request->user()->uuid,
+                $hostUserId,
+                (bool) $validated['isActive']
+            );
+        } catch (RuntimeException $e) {
+            throw new BookingPortalException($e->getMessage());
+        }
+
+        return response()->json(array_merge([
+            'message' => $validated['isActive'] ? 'Airbnb User ID activated.' : 'Airbnb User ID deactivated.',
+        ], $payload));
+    }
+
+    public function airbnbRemoveHost(Request $request, string $hostUserId): JsonResponse
+    {
+        $this->portalRepository->ensureRowsForUser($request->user()->uuid);
+
+        try {
+            $payload = $this->otaConnection->removeAirbnbHost(
+                $request->user()->uuid,
+                $hostUserId
+            );
+        } catch (RuntimeException $e) {
+            throw new BookingPortalException($e->getMessage());
+        }
+
+        return response()->json(array_merge([
+            'message' => 'Airbnb User ID removed.',
+        ], $payload));
     }
 
     public function available(Request $request): JsonResponse
@@ -330,6 +611,14 @@ class BookingPortalController extends Controller
     {
         if (! array_key_exists($portalKey, $this->portalRepository->portalCatalog())) {
             abort(404, 'Unknown portal.');
+        }
+    }
+
+    private function assertOtaPortalKey(string $portalKey): void
+    {
+        $this->assertPortalKey($portalKey);
+        if (! OtaPortalSchemas::isSupported($portalKey)) {
+            abort(404, 'Unknown OTA portal.');
         }
     }
 }

@@ -34,6 +34,21 @@ class BookingPortalConnection extends Model
         'guest_portal_accent_color',
         'guest_portal_hero_image_url',
         'guest_portal_layout',
+        'external_base_url',
+        'external_merchant_email',
+        'external_api_secret',
+        'external_credentials',
+        'external_access_token',
+        'external_token_expires_at',
+        'external_organization_uuid',
+        'external_organization_name',
+        'connection_meta',
+    ];
+
+    protected $hidden = [
+        'external_api_secret',
+        'external_credentials',
+        'external_access_token',
     ];
 
     /**
@@ -49,6 +64,11 @@ class BookingPortalConnection extends Model
             'guest_portal_design_completed' => 'boolean',
             'last_synced_at' => 'datetime',
             'guest_portal_layout' => 'array',
+            'external_api_secret' => 'encrypted',
+            'external_credentials' => 'encrypted:array',
+            'external_access_token' => 'encrypted',
+            'external_token_expires_at' => 'datetime',
+            'connection_meta' => 'array',
         ];
     }
 

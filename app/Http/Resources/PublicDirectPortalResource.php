@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\BookingPortalConnection;
+use App\Models\MerchantPaymentGateway;
 use App\Models\User;
 use App\Support\GuestPortalLayout;
 use App\Support\GuestPortalUnits;
@@ -30,6 +31,8 @@ class PublicDirectPortalResource extends JsonResource
         $row = $this->resource['connection'];
         $slug = $this->resource['slug'];
 
+        $activeGateway = MerchantPaymentGateway::activeForUser($user->uuid);
+
         return [
             'slug' => $slug,
             'merchantName' => $user->merchant_name,
@@ -43,6 +46,17 @@ class PublicDirectPortalResource extends JsonResource
                 ?? 'https://images.unsplash.com/photo-1540541338287-41700207dee6?auto=format&fit=crop&w=1600&q=80',
             'layout' => GuestPortalLayout::normalize($row->guest_portal_layout),
             'units' => GuestPortalUnits::publicPayloadForUserUuid($user->uuid),
+            'paymentGateway' => $activeGateway ? [
+                'provider' => $activeGateway->provider,
+                'providerLabel' => match ($activeGateway->provider) {
+                    MerchantPaymentGateway::PROVIDER_PAYMONGO => 'PayMongo',
+                    MerchantPaymentGateway::PROVIDER_PAYPAL => 'PayPal',
+                    MerchantPaymentGateway::PROVIDER_PAYNAMICS => 'Paynamics',
+                    default => $activeGateway->provider,
+                },
+                'name' => $activeGateway->name,
+                'onlineCheckout' => true,
+            ] : null,
         ];
     }
 }

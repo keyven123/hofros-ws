@@ -16,6 +16,7 @@ use App\Support\DirectPortalPromoCode;
 use App\Support\MobileAppClient;
 use App\Support\PromotionPricingEngine;
 use App\Support\UnitStayPricing;
+use App\Services\Payments\DirectPortalBookingCheckout;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
@@ -27,6 +28,7 @@ class PublicDirectPortalBookingController extends Controller
     public function __construct(
         protected PublicDirectPortalRepository $portalRepository,
         protected BookingRepository $bookingRepository,
+        protected DirectPortalBookingCheckout $bookingCheckout,
     ) {
     }
 
@@ -146,7 +148,6 @@ class PublicDirectPortalBookingController extends Controller
         }
 
         $batchId = (string) Str::uuid();
-        $multi = count($bookUnits) > 1;
 
         try {
             $created = DB::transaction(function () use (
@@ -158,7 +159,6 @@ class PublicDirectPortalBookingController extends Controller
                 $children,
                 $validated,
                 $batchId,
-                $multi,
                 $promoEntity,
                 $selectedPromotion,
                 $promotion,
@@ -186,7 +186,7 @@ class PublicDirectPortalBookingController extends Controller
                         'source' => $bookingSource,
                         'status' => Booking::STATUS_PENDING,
                         'notes' => null,
-                        'portal_batch_id' => $multi ? $batchId : null,
+                        'portal_batch_id' => $batchId,
                     ]);
 
                     if ($selectedPromotion !== null && (float) $promotion['discountAmount'] > 0) {
@@ -235,6 +235,13 @@ class PublicDirectPortalBookingController extends Controller
             throw $e;
         }
 
+        $totalAmount = round(array_sum(array_map(static fn (Booking $b): float => (float) $b->total_price, $created)), 2);
+        $payment = $this->bookingCheckout->prepareForBookings(
+            $created,
+            $totalAmount,
+            (string) ($created[0]->currency ?? 'PHP'),
+        );
+
         return response()->json($this->toPublicPayload(
             $created,
             round($subtotal, 2),
@@ -243,11 +250,14 @@ class PublicDirectPortalBookingController extends Controller
             $promotionDiscount,
             $promotion['promotionName'],
             $promoDiscount,
+            $payment,
+            $slug,
         ), Response::HTTP_CREATED);
     }
 
     /**
      * @param  list<Booking>  $bookings
+     * @param  array{checkout: mixed, checkoutUrl: ?string, paymentRequired: bool, provider: ?string, providerLabel: ?string, totalAmount?: float, reservationAmount?: float}  $payment
      * @return array<string, mixed>
      */
     private function toPublicPayload(
@@ -258,10 +268,16 @@ class PublicDirectPortalBookingController extends Controller
         float $promotionDiscount = 0.0,
         ?string $promotionName = null,
         float $promoCodeDiscount = 0.0,
+        array $payment = [],
+        string $merchantSlug = '',
     ): array {
         $first = $bookings[0];
         $refs = array_map(static fn (Booking $b): string => (string) $b->reference, $bookings);
         $totalAmount = round(array_sum(array_map(static fn (Booking $b): float => (float) $b->total_price, $bookings)), 2);
+        $paymentRequired = (bool) ($payment['paymentRequired'] ?? false);
+        $reservationAmount = isset($payment['reservationAmount'])
+            ? round((float) $payment['reservationAmount'], 2)
+            : round($totalAmount / 2, 2);
 
         return [
             'reference' => $first->reference,
@@ -273,12 +289,24 @@ class PublicDirectPortalBookingController extends Controller
             'promoCodeDiscountAmount' => round($promoCodeDiscount, 2),
             'discountAmount' => round($discountAmount, 2),
             'totalAmount' => $totalAmount,
+            'reservationAmount' => $reservationAmount,
             'promoCode' => $promoCode,
             'portalBatchId' => $first->portal_batch_id,
             'status' => $first->status,
-            'message' => count($bookings) > 1
-                ? 'Your booking requests were recorded. The host will follow up to confirm.'
-                : 'Your booking request was recorded. The host will follow up to confirm.',
+            'paymentRequired' => $paymentRequired,
+            'checkoutUrl' => null,
+            'checkoutId' => null,
+            'checkoutPath' => $paymentRequired && $first->portal_batch_id && $merchantSlug !== ''
+                ? '/'.$merchantSlug.'/directportal/checkout/'.$first->portal_batch_id
+                : null,
+            'paymentProvider' => $payment['provider'] ?? null,
+            'paymentProviderLabel' => $payment['providerLabel'] ?? null,
+            'paymentError' => $payment['error'] ?? null,
+            'message' => $paymentRequired
+                ? 'Choose pay now or pay reservation to complete your booking.'
+                : (count($bookings) > 1
+                    ? 'Your booking requests were recorded. The host will follow up to confirm.'
+                    : 'Your booking request was recorded. The host will follow up to confirm.'),
         ];
     }
 }

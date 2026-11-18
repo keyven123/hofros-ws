@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\AdminConsoleController;
 use App\Http\Controllers\Api\V1\AdminMarketingController;
 use App\Http\Controllers\Api\V1\MarketingAuthController;
 use App\Http\Controllers\Api\V1\MarketingWorkspaceController;
+use App\Http\Controllers\Api\V1\AdminPartnerPortalController;
 use App\Http\Controllers\Api\V1\AdminSubscriptionController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BookingController;
@@ -19,9 +20,11 @@ use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\PortalMessageController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\GettingStartedController;
+use App\Http\Controllers\Api\V1\MerchantPaymentGatewayController;
 use App\Http\Controllers\Api\V1\PublicDirectPortalBookingController;
 use App\Http\Controllers\Api\V1\PublicDirectPortalCalendarController;
 use App\Http\Controllers\Api\V1\PublicDirectPortalController;
+use App\Http\Controllers\Api\V1\PublicDirectPortalPaymentController;
 use App\Http\Controllers\Api\V1\PublicDirectPortalQuoteController;
 use App\Http\Controllers\Api\V1\PromoCodeController;
 use App\Http\Controllers\Api\V1\PromotionController;
@@ -61,6 +64,14 @@ Route::prefix('v1')->group(function (): void {
     Route::get('/public/direct-portals/{slug}/quote', [PublicDirectPortalQuoteController::class, 'show'])
         ->where('slug', '[a-z0-9-]+');
     Route::post('/public/direct-portals/{slug}/bookings', [PublicDirectPortalBookingController::class, 'store'])
+        ->where('slug', '[a-z0-9-]+');
+    Route::get('/public/direct-portals/{slug}/checkout/{batchId}', [PublicDirectPortalPaymentController::class, 'showCheckout'])
+        ->where('slug', '[a-z0-9-]+');
+    Route::post('/public/direct-portals/{slug}/checkout/{batchId}/pay', [PublicDirectPortalPaymentController::class, 'startCheckout'])
+        ->where('slug', '[a-z0-9-]+');
+    Route::get('/public/direct-portals/{slug}/payments/{ref}', [PublicDirectPortalPaymentController::class, 'show'])
+        ->where('slug', '[a-z0-9-]+');
+    Route::post('/public/direct-portals/{slug}/payments/confirm', [PublicDirectPortalPaymentController::class, 'confirm'])
         ->where('slug', '[a-z0-9-]+');
     Route::post('/customer/register', [CustomerAuthController::class, 'register']);
     Route::post('/customer/login', [CustomerAuthController::class, 'login']);
@@ -105,6 +116,9 @@ Route::prefix('v1')->group(function (): void {
         Route::put('/subscriptions/billing-discounts', [AdminSubscriptionController::class, 'updateBillingDiscounts']);
         Route::put('/subscriptions/free-trial', [AdminSubscriptionController::class, 'updateFreeTrial']);
         Route::post('/subscriptions/assign', [AdminSubscriptionController::class, 'assign']);
+        Route::get('/partner-portals', [AdminPartnerPortalController::class, 'index']);
+        Route::put('/partner-portals', [AdminPartnerPortalController::class, 'updateMany']);
+        Route::put('/partner-portals/{portalKey}', [AdminPartnerPortalController::class, 'update']);
     });
 
     Route::middleware(['auth:sanctum', 'merchant'])->group(function (): void {
@@ -133,6 +147,14 @@ Route::prefix('v1')->group(function (): void {
         Route::put('/account/password', [AccountSettingsController::class, 'updatePassword']);
         Route::get('/account/payment', [PaymentSettingsController::class, 'show']);
         Route::put('/account/payment', [PaymentSettingsController::class, 'update']);
+
+        Route::get('/payment-gateways', [MerchantPaymentGatewayController::class, 'index']);
+        Route::post('/payment-gateways', [MerchantPaymentGatewayController::class, 'store']);
+        Route::put('/payment-gateways/{id}', [MerchantPaymentGatewayController::class, 'update']);
+        Route::delete('/payment-gateways/{id}', [MerchantPaymentGatewayController::class, 'destroy']);
+        Route::post('/payment-gateways/{id}/activate', [MerchantPaymentGatewayController::class, 'activate']);
+        Route::post('/payment-gateways/{id}/deactivate', [MerchantPaymentGatewayController::class, 'deactivate']);
+
         Route::get('/getting-started', [GettingStartedController::class, 'show']);
         Route::post('/getting-started/dismiss', [GettingStartedController::class, 'dismiss']);
 
@@ -147,6 +169,26 @@ Route::prefix('v1')->group(function (): void {
         Route::patch('/booking-portals/direct-website/content', [BookingPortalController::class, 'saveDirectWebsiteContent']);
         Route::post('/booking-portals/direct-website/design', [BookingPortalController::class, 'saveDirectWebsiteDesign']);
         Route::patch('/booking-portals/direct-website/live', [BookingPortalController::class, 'setDirectWebsiteLive']);
+        Route::get('/booking-portals/ticketoc/settings', [BookingPortalController::class, 'ticketocSettings']);
+        Route::post('/booking-portals/ticketoc/test', [BookingPortalController::class, 'ticketocTest']);
+        Route::post('/booking-portals/ticketoc/connect', [BookingPortalController::class, 'ticketocConnect']);
+        Route::post('/booking-portals/ticketoc/disconnect', [BookingPortalController::class, 'ticketocDisconnect']);
+        Route::get('/booking-portals/{portalKey}/ota/settings', [BookingPortalController::class, 'otaSettings'])
+            ->where('portalKey', 'booking_com|airbnb|agoda|tripadvisor');
+        Route::post('/booking-portals/{portalKey}/ota/test', [BookingPortalController::class, 'otaTest'])
+            ->where('portalKey', 'booking_com|airbnb|agoda|tripadvisor');
+        Route::post('/booking-portals/{portalKey}/ota/connect', [BookingPortalController::class, 'otaConnect'])
+            ->where('portalKey', 'booking_com|airbnb|agoda|tripadvisor');
+        Route::post('/booking-portals/{portalKey}/ota/disconnect', [BookingPortalController::class, 'otaDisconnect'])
+            ->where('portalKey', 'booking_com|airbnb|agoda|tripadvisor');
+        Route::get('/booking-portals/airbnb/accommodations', [BookingPortalController::class, 'airbnbAccommodations']);
+        Route::post('/booking-portals/airbnb/accommodations/reload', [BookingPortalController::class, 'airbnbReloadAccommodations']);
+        Route::put('/booking-portals/airbnb/accommodations', [BookingPortalController::class, 'airbnbSaveAccommodations']);
+        Route::post('/booking-portals/airbnb/hosts', [BookingPortalController::class, 'airbnbAddHost']);
+        Route::patch('/booking-portals/airbnb/hosts/{hostUserId}', [BookingPortalController::class, 'airbnbSetHostActive'])
+            ->where('hostUserId', '[0-9]{5,20}');
+        Route::delete('/booking-portals/airbnb/hosts/{hostUserId}', [BookingPortalController::class, 'airbnbRemoveHost'])
+            ->where('hostUserId', '[0-9]{5,20}');
         Route::get('/booking-portals/available', [BookingPortalController::class, 'available']);
         Route::patch('/booking-portals/{portalKey}/active', [BookingPortalController::class, 'updateActive'])
             ->where('portalKey', '[a-z_]+');

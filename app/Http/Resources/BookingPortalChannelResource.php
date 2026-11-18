@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Http\Repositories\BookingPortalRepository;
 use App\Models\BookingPortalConnection;
+use App\Support\OtaPortalSchemas;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Str;
@@ -38,6 +39,12 @@ class BookingPortalChannelResource extends JsonResource
                 $disconnectedLabel = 'Open website builder';
                 $disconnectedKind = 'open_website_builder';
             }
+        } elseif ($row->portal_key === BookingPortalRepository::TICKETOC_KEY) {
+            $disconnectedLabel = 'Connect';
+            $disconnectedKind = 'open_ticketoc_connect';
+        } elseif (OtaPortalSchemas::isSupported($row->portal_key)) {
+            $disconnectedLabel = 'Connect';
+            $disconnectedKind = 'open_ota_connect';
         }
 
         $visitUrl = ($isDirect && $live) ? '/'.$merchantSlug.'/directportal' : null;
