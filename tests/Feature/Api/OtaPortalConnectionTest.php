@@ -21,7 +21,7 @@ class OtaPortalConnectionTest extends ApiTestCase
             ])
             ->assertJsonFragment([
                 'id' => 'airbnb',
-                'disconnectedActionKind' => 'open_ota_connect',
+                'disconnectedActionKind' => 'open_airbnb_connect',
             ])
             ->assertJsonFragment([
                 'id' => 'agoda',

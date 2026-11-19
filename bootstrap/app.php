@@ -24,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'customer' => \App\Http\Middleware\EnsureCustomerAccount::class,
             'platform-admin' => \App\Http\Middleware\EnsurePlatformAdmin::class,
             'marketing' => \App\Http\Middleware\EnsureMarketingAccount::class,
+            'ticketoc.partner' => \App\Http\Middleware\VerifyTicketocPartnerKey::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AccountSettingsController;
 use App\Http\Controllers\Api\V1\AnalyticsController;
+use App\Http\Controllers\Api\V1\PartnerTicketocController;
 use App\Http\Controllers\Api\V1\PaymentSettingsController;
 use App\Http\Controllers\Api\V1\AdminAuthController;
 use App\Http\Controllers\Api\V1\AdminConsoleController;
@@ -56,6 +57,14 @@ Route::get('/health', HealthController::class);
 
 Route::prefix('v1')->group(function (): void {
     Route::get('/health', HealthController::class);
+
+    Route::prefix('partners/ticketoc')->middleware('ticketoc.partner')->group(function (): void {
+        Route::get('/ping', [PartnerTicketocController::class, 'ping']);
+        Route::get('/inventory', [PartnerTicketocController::class, 'inventory']);
+        Route::get('/units/{unitId}', [PartnerTicketocController::class, 'unit']);
+        Route::post('/bookings', [PartnerTicketocController::class, 'storeBooking']);
+    });
+
     Route::get('/public/pricing', PublicPricingController::class);
     Route::get('/public/direct-portals/{slug}', [PublicDirectPortalController::class, 'show'])
         ->where('slug', '[a-z0-9-]+');
@@ -118,6 +127,7 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/subscriptions/assign', [AdminSubscriptionController::class, 'assign']);
         Route::get('/partner-portals', [AdminPartnerPortalController::class, 'index']);
         Route::put('/partner-portals', [AdminPartnerPortalController::class, 'updateMany']);
+        Route::post('/partner-portals/ticketoc/stay/connect', [AdminPartnerPortalController::class, 'connectStay']);
         Route::put('/partner-portals/{portalKey}', [AdminPartnerPortalController::class, 'update']);
     });
 

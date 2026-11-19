@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Crypt;
 
 class PartnerPortalIntegration extends Model
 {
@@ -125,11 +126,62 @@ class PartnerPortalIntegration extends Model
     }
 
     /**
+     * Partner key saved in admin, decrypted. Does not fall back to the environment.
+     */
+    public function storedOtaPartnerKey(): ?string
+    {
+        $meta = is_array($this->meta) ? $this->meta : [];
+        $stored = trim((string) ($meta['ota_partner_key'] ?? ''));
+        if ($stored === '') {
+            return null;
+        }
+
+        try {
+            $plain = Crypt::decryptString($stored);
+
+            return $plain !== '' ? $plain : null;
+        } catch (\Throwable) {
+            return $stored;
+        }
+    }
+
+    /**
+     * Key Ticketoc sends when it calls Hofros Stay. Admin value wins over the environment.
+     */
+    public function otaPartnerKey(): ?string
+    {
+        return $this->storedOtaPartnerKey()
+            ?: (($fallback = trim((string) config('services.ticketoc.ota_partner_key'))) !== '' ? $fallback : null);
+    }
+
+    public function setOtaPartnerKey(string $key): void
+    {
+        $key = trim($key);
+        $meta = is_array($this->meta) ? $this->meta : [];
+        $meta['ota_partner_key'] = Crypt::encryptString($key);
+        $meta['stay_partner_prefix'] = substr($key, 0, 12);
+        $meta['stay_status'] = 'saved';
+        $meta['stay_last_error'] = null;
+        $meta['stay_last_tested_at'] = null;
+        $this->meta = $meta;
+    }
+
+    public function markStay(string $status, ?string $error): void
+    {
+        $meta = is_array($this->meta) ? $this->meta : [];
+        $meta['stay_status'] = $status;
+        $meta['stay_last_error'] = $error;
+        $meta['stay_last_tested_at'] = now()->toIso8601String();
+        $this->meta = $meta;
+        $this->save();
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function toAdminArray(): array
     {
-        return [
+        $payload = [
             'uuid' => $this->uuid,
             'portalKey' => $this->portal_key,
             'name' => $this->name,
@@ -138,5 +190,20 @@ class PartnerPortalIntegration extends Model
             'isConfigured' => filled($this->api_base_url),
             'updatedAt' => $this->updated_at?->toIso8601String(),
         ];
+
+        if ($this->portal_key === 'ticketoc') {
+            $meta = is_array($this->meta) ? $this->meta : [];
+            $key = $this->otaPartnerKey();
+            $payload['stayPartnerKeySet'] = $key !== null;
+            $payload['stayPartnerKeyPrefix'] = is_string($meta['stay_partner_prefix'] ?? null) && $meta['stay_partner_prefix'] !== ''
+                ? $meta['stay_partner_prefix']
+                : ($key !== null ? substr($key, 0, 12) : null);
+            $payload['stayStatus'] = (string) ($meta['stay_status'] ?? ($key !== null ? 'saved' : 'missing'));
+            $payload['stayLastError'] = $meta['stay_last_error'] ?? null;
+            $payload['stayLastTestedAt'] = $meta['stay_last_tested_at'] ?? null;
+            $payload['stayInboundUrl'] = rtrim((string) (request()?->getSchemeAndHttpHost() ?: config('app.url')), '/').'/api';
+        }
+
+        return $payload;
     }
 }

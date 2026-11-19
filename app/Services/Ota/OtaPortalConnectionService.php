@@ -43,7 +43,7 @@ final class OtaPortalConnectionService
 
     /**
      * @param  array<string, mixed>  $input
-     * @return array{ok: bool, portalKey: string, propertyLabel: string, fieldsReceived: int}
+     * @return array{ok: bool, portalKey: string, propertyLabel: string, fieldsReceived: int, listingCount?: int, userId?: string, baseUrl: string}
      */
     public function test(string $portalKey, array $input, ?BookingPortalConnection $existing = null): array
     {
@@ -51,13 +51,23 @@ final class OtaPortalConnectionService
         $baseUrl = $this->resolvePlatformBaseUrl($portalKey);
         $credentials = $this->normalizeCredentials($portalKey, $input, $existing);
 
-        return [
+        $result = [
             'ok' => true,
             'portalKey' => $portalKey,
             'propertyLabel' => $this->propertyLabel($portalKey, $credentials),
             'fieldsReceived' => count(array_filter($credentials, fn ($value) => $value !== null && $value !== '')),
             'baseUrl' => $baseUrl,
         ];
+
+        if ($portalKey === 'airbnb') {
+            $userId = (string) ($credentials['userId'] ?? '');
+            $listings = $this->captureAirbnbListingsForUser($userId, $baseUrl);
+            $result['userId'] = $userId;
+            $result['listingCount'] = count($listings);
+            $result['propertyLabel'] = 'Airbnb · '.$userId;
+        }
+
+        return $result;
     }
 
     /**

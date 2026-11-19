@@ -39,6 +39,7 @@ class Booking extends Model
     public const SOURCE_DIRECT_PORTAL = 'direct_portal';
     public const SOURCE_MANUAL = 'manual';
     public const SOURCE_MOBILE_APP = 'mobile_app';
+    public const SOURCE_TICKETOC = 'ticketoc';
 
     protected $fillable = [
         'user_uuid',

@@ -42,6 +42,9 @@ class BookingPortalChannelResource extends JsonResource
         } elseif ($row->portal_key === BookingPortalRepository::TICKETOC_KEY) {
             $disconnectedLabel = 'Connect';
             $disconnectedKind = 'open_ticketoc_connect';
+        } elseif ($row->portal_key === 'airbnb') {
+            $disconnectedLabel = 'Connect';
+            $disconnectedKind = 'open_airbnb_connect';
         } elseif (OtaPortalSchemas::isSupported($row->portal_key)) {
             $disconnectedLabel = 'Connect';
             $disconnectedKind = 'open_ota_connect';
