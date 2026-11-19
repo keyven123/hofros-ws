@@ -80,4 +80,9 @@ class TicketocStayConnectionService
 
         return $base.'/api/v1/integrations/stay/ping';
     }
+
+    public function inventoryUrl(string $base): string
+    {
+        return preg_replace('#/ping$#', '/inventory', $this->pingUrl($base)) ?: $this->pingUrl($base);
+    }
 }

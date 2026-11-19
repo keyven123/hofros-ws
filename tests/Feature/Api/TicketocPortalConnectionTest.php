@@ -5,6 +5,8 @@ namespace Tests\Feature\Api;
 use App\Http\Repositories\BookingPortalRepository;
 use App\Models\BookingPortalConnection;
 use App\Models\PartnerPortalIntegration;
+use App\Models\Property;
+use App\Models\Unit;
 use Illuminate\Support\Facades\Http;
 
 class TicketocPortalConnectionTest extends ApiTestCase
@@ -36,7 +38,10 @@ class TicketocPortalConnectionTest extends ApiTestCase
     public function testTicketocSettingsAndConnectFlow(): void
     {
         $this->authenticate();
-        config(['services.ticketoc.base_url' => 'https://ticketoc.test/api/v1']);
+        config([
+            'services.ticketoc.base_url' => 'https://ticketoc.test/api/v1',
+            'services.ticketoc.ota_partner_key' => 'tkoc_test_partner_key_1234567890',
+        ]);
         PartnerPortalIntegration::forPortal('ticketoc')?->update([
             'api_base_url' => 'https://ticketoc.test/api/v1',
             'is_enabled' => true,
@@ -68,6 +73,20 @@ class TicketocPortalConnectionTest extends ApiTestCase
                 'data' => [],
                 'meta' => ['total' => 3],
             ]),
+            'https://ticketoc.test/api/v1/integrations/stay/inventory' => Http::response([
+                'ok' => true,
+                'result' => ['properties' => 1, 'rooms' => 1, 'blocks' => 0],
+            ]),
+        ]);
+
+        $property = Property::factory()->create([
+            'user_uuid' => $this->authUser->uuid,
+            'property_name' => 'Harbor House',
+        ]);
+        Unit::factory()->create([
+            'user_uuid' => $this->authUser->uuid,
+            'property_uuid' => $property->uuid,
+            'name' => 'Deluxe Room',
         ]);
 
         $this->getJson('/api/v1/booking-portals/ticketoc/settings')
@@ -82,7 +101,7 @@ class TicketocPortalConnectionTest extends ApiTestCase
         ])
             ->assertOk()
             ->assertJsonPath('result.ok', true)
-            ->assertJsonPath('result.listingCount', 3);
+            ->assertJsonPath('result.listingCount', 1);
 
         $this->postJson('/api/v1/booking-portals/ticketoc/connect', [
             'email' => 'merchant@ticketoc.test',
@@ -91,13 +110,14 @@ class TicketocPortalConnectionTest extends ApiTestCase
             ->assertOk()
             ->assertJsonPath('settings.isConnected', true)
             ->assertJsonPath('settings.organizationName', 'Ticketoc Merchant')
+            ->assertJsonPath('settings.listingCount', 1)
             ->assertJsonPath('channel.isConnected', true);
 
         $this->assertDatabaseHas('booking_portal_connections', [
             'user_uuid' => $this->authUser->uuid,
             'portal_key' => BookingPortalRepository::TICKETOC_KEY,
             'is_connected' => 1,
-            'listing_count' => 3,
+            'listing_count' => 1,
             'external_organization_uuid' => 'org-1',
         ]);
 

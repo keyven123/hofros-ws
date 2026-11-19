@@ -314,6 +314,7 @@ class BookingPortalController extends Controller
 
         try {
             $result = $this->ticketocConnection->test(
+                $request->user()->uuid,
                 $credentials['email'],
                 $credentials['password'],
             );
@@ -342,7 +343,7 @@ class BookingPortalController extends Controller
         }
 
         return response()->json([
-            'message' => 'Ticketoc connected. Hofros can now sync stays from this account.',
+            'message' => 'Captured '.$row->listing_count.' '.($row->listing_count === 1 ? 'room' : 'rooms').' for '.($row->external_organization_name ?: 'your Ticketoc organization').'.',
             'settings' => $this->ticketocConnection->settingsPayload($row),
             'channel' => (new BookingPortalChannelResource($row))->resolve($request),
         ]);

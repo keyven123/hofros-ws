@@ -6,6 +6,8 @@ use App\Http\Repositories\BookingPortalRepository;
 use App\Models\BookingPortalConnection;
 use App\Models\PartnerPortalIntegration;
 use Carbon\Carbon;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 final class TicketocConnectionService
@@ -13,6 +15,8 @@ final class TicketocConnectionService
     public function __construct(
         private TicketocClient $client,
         private BookingPortalRepository $portalRepository,
+        private HofrosRoomCatalog $rooms,
+        private TicketocStayConnectionService $stay,
     ) {
     }
 
@@ -33,18 +37,21 @@ final class TicketocConnectionService
     /**
      * @return array{ok: bool, organizationUuid: ?string, organizationName: ?string, listingCount: int, email: string, baseUrl: string}
      */
-    public function test(string $email, string $password): array
+    public function test(string $userUuid, string $email, string $password): array
     {
+        $this->assertStayReady();
         $baseUrl = $this->resolvePlatformBaseUrl();
         $login = $this->client->login($baseUrl, $email, $password);
         $this->client->me($baseUrl, $login['access_token']);
-        $stays = $this->client->staysSummary($baseUrl, $login['access_token']);
+        if (! filled($login['organization_uuid'])) {
+            throw new RuntimeException('This Ticketoc account is not linked to an organization.');
+        }
 
         return [
             'ok' => true,
             'organizationUuid' => $login['organization_uuid'],
             'organizationName' => $login['organization_name'],
-            'listingCount' => $stays['listing_count'],
+            'listingCount' => $this->roomCount($userUuid),
             'email' => $email,
             'baseUrl' => $baseUrl,
         ];
@@ -55,10 +62,14 @@ final class TicketocConnectionService
      */
     public function connect(string $userUuid, string $email, string $password): BookingPortalConnection
     {
+        $this->assertStayReady();
         $baseUrl = $this->resolvePlatformBaseUrl();
         $login = $this->client->login($baseUrl, $email, $password);
         $this->client->me($baseUrl, $login['access_token']);
-        $stays = $this->client->staysSummary($baseUrl, $login['access_token']);
+        if (! filled($login['organization_uuid'])) {
+            throw new RuntimeException('This Ticketoc account is not linked to an organization.');
+        }
+        $captured = $this->pushRooms($userUuid, (string) $login['organization_uuid']);
 
         $row = $this->portalRepository->ticketocRow($userUuid);
 
@@ -81,7 +92,7 @@ final class TicketocConnectionService
         $row->update([
             'is_connected' => true,
             'is_active' => true,
-            'listing_count' => max(0, (int) $stays['listing_count']),
+            'listing_count' => $captured['rooms'],
             'last_synced_at' => now(),
             'has_sync_issue' => false,
             'external_base_url' => $baseUrl,
@@ -139,7 +150,11 @@ final class TicketocConnectionService
 
         try {
             $login = $this->client->login($baseUrl, $email, $password);
-            $stays = $this->client->staysSummary($baseUrl, $login['access_token']);
+            $organizationUuid = (string) ($login['organization_uuid'] ?: $row->external_organization_uuid);
+            if ($organizationUuid === '') {
+                throw new RuntimeException('This Ticketoc account is not linked to an organization.');
+            }
+            $captured = $this->pushRooms($userUuid, $organizationUuid);
 
             $expiresAt = null;
             if (! empty($login['expires_in'])) {
@@ -155,7 +170,7 @@ final class TicketocConnectionService
             $meta['last_error'] = null;
 
             $row->update([
-                'listing_count' => max(0, (int) $stays['listing_count']),
+                'listing_count' => $captured['rooms'],
                 'last_synced_at' => now(),
                 'has_sync_issue' => false,
                 'external_base_url' => $baseUrl,
@@ -193,6 +208,7 @@ final class TicketocConnectionService
             'isActive' => (bool) $row->is_active,
             'apiConfigured' => $platformEnabled && filled($platformBaseUrl),
             'platformEnabled' => $platformEnabled,
+            'stayConnected' => filled(PartnerPortalIntegration::forPortal(BookingPortalRepository::TICKETOC_KEY)?->otaPartnerKey()),
             'email' => $row->external_merchant_email,
             'emailMasked' => $this->maskEmail($row->external_merchant_email),
             'hasPassword' => filled($row->external_api_secret),
@@ -204,6 +220,75 @@ final class TicketocConnectionService
             'lastError' => $meta['last_error'] ?? null,
             'environment' => $meta['environment'] ?? null,
             'lastValidatedAt' => $meta['last_validated_at'] ?? null,
+        ];
+    }
+
+    private function assertStayReady(): void
+    {
+        $key = PartnerPortalIntegration::forPortal(BookingPortalRepository::TICKETOC_KEY)?->otaPartnerKey();
+        if (! filled($key)) {
+            throw new RuntimeException('Ticketoc Stay is not connected yet. Ask a Hofros admin to connect Stay under Partner integrations.');
+        }
+    }
+
+    private function roomCount(string $userUuid): int
+    {
+        $count = 0;
+        foreach ($this->rooms->forUser($userUuid) as $property) {
+            $count += count(is_array($property['units'] ?? null) ? $property['units'] : []);
+        }
+
+        return $count;
+    }
+
+    /**
+     * @return array{properties: int, rooms: int}
+     */
+    private function pushRooms(string $userUuid, string $organizationUuid): array
+    {
+        $this->assertStayReady();
+        $key = (string) PartnerPortalIntegration::forPortal(BookingPortalRepository::TICKETOC_KEY)?->otaPartnerKey();
+        $properties = $this->rooms->forUser($userUuid);
+        if ($properties === []) {
+            throw new RuntimeException('This Hofros account has no rooms to capture.');
+        }
+
+        foreach ($properties as &$property) {
+            $property['organization_uuid'] = $organizationUuid;
+        }
+        unset($property);
+
+        try {
+            $response = Http::acceptJson()
+                ->asJson()
+                ->timeout(20)
+                ->withToken($key)
+                ->withHeaders(['X-Partner-Key' => $key])
+                ->put($this->stay->inventoryUrl($this->resolvePlatformBaseUrl()), [
+                    'properties' => $properties,
+                ]);
+        } catch (ConnectionException) {
+            throw new RuntimeException('Ticketoc Stay could not be reached.');
+        }
+
+        if ($response->status() === 409) {
+            throw new RuntimeException('Ticketoc Stay is still disconnected. Ask a Hofros admin to click Connect Stay, then try again.');
+        }
+
+        if ($response->status() === 401) {
+            throw new RuntimeException('Ticketoc rejected the Stay partner key. Ask a Hofros admin to save the same key and connect again.');
+        }
+
+        if ($response->failed()) {
+            $message = trim((string) ($response->json('message') ?: 'Ticketoc did not accept the rooms.'));
+            throw new RuntimeException($message);
+        }
+
+        $result = is_array($response->json('result')) ? $response->json('result') : [];
+
+        return [
+            'properties' => (int) ($result['properties'] ?? count($properties)),
+            'rooms' => (int) ($result['rooms'] ?? $this->roomCount($userUuid)),
         ];
     }
 
