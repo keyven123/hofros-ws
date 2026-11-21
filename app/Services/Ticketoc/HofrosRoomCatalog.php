@@ -69,6 +69,7 @@ final class HofrosRoomCatalog
                 'id' => $block->uuid,
                 'start_date' => $block->start_date?->toDateString(),
                 'end_date' => $block->end_date?->toDateString(),
+                'end_exclusive' => true,
                 'label' => $block->label,
             ];
         }
@@ -81,6 +82,7 @@ final class HofrosRoomCatalog
                 'id' => 'booking:'.$booking->uuid,
                 'start_date' => $booking->check_in?->toDateString(),
                 'end_date' => $booking->check_out?->toDateString(),
+                'end_exclusive' => true,
                 'label' => 'Booked',
             ];
         }

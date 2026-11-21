@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Unit;
 use App\Services\Ticketoc\HofrosRoomCatalog;
+use App\Services\Ticketoc\HofrosStayCalendar;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -14,7 +16,10 @@ use Illuminate\Http\Request;
  */
 class PartnerTicketocController extends Controller
 {
-    public function __construct(private HofrosRoomCatalog $rooms) {}
+    public function __construct(
+        private HofrosRoomCatalog $rooms,
+        private HofrosStayCalendar $calendar,
+    ) {}
 
     public function ping(): JsonResponse
     {
@@ -28,6 +33,22 @@ class PartnerTicketocController extends Controller
     public function inventory(): JsonResponse
     {
         return response()->json(['properties' => $this->rooms->all()]);
+    }
+
+    public function availability(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'from' => ['required', 'date'],
+            'to' => ['required', 'date', 'after_or_equal:from'],
+            'unit_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'unit_ids.*' => ['required', 'uuid'],
+        ]);
+
+        if (Carbon::parse($data['from'])->diffInDays(Carbon::parse($data['to'])) > 400) {
+            return response()->json(['message' => 'Choose a calendar range of 400 days or less.'], 422);
+        }
+
+        return response()->json($this->calendar->forUnits($data['unit_ids'], $data['from'], $data['to']));
     }
 
     public function unit(string $unitId): JsonResponse

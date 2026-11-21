@@ -61,6 +61,7 @@ Route::prefix('v1')->group(function (): void {
     Route::prefix('partners/ticketoc')->middleware('ticketoc.partner')->group(function (): void {
         Route::get('/ping', [PartnerTicketocController::class, 'ping']);
         Route::get('/inventory', [PartnerTicketocController::class, 'inventory']);
+        Route::get('/availability', [PartnerTicketocController::class, 'availability']);
         Route::get('/units/{unitId}', [PartnerTicketocController::class, 'unit']);
         Route::post('/bookings', [PartnerTicketocController::class, 'storeBooking']);
     });

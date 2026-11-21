@@ -5,6 +5,7 @@ namespace Tests\Feature\Api;
 use App\Models\Booking;
 use App\Models\Property;
 use App\Models\Unit;
+use App\Models\UnitDateBlock;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 
@@ -95,5 +96,49 @@ class PartnerTicketocTest extends ApiTestCase
             ->assertJsonPath('created', false);
 
         $this->assertSame(1, Booking::query()->count());
+    }
+
+    #[Test]
+    public function availability_follows_the_merchant_calendar_for_the_mapped_room(): void
+    {
+        $property = Property::factory()->create();
+        $unit = Unit::factory()->create([
+            'user_uuid' => $property->user_uuid,
+            'property_uuid' => $property->uuid,
+            'week_schedule' => array_merge(Unit::defaultWeekSchedule(), ['wed' => false]),
+        ]);
+        UnitDateBlock::factory()->create([
+            'user_uuid' => $property->user_uuid,
+            'unit_uuid' => $unit->uuid,
+            'start_date' => '2026-12-02',
+            'end_date' => '2026-12-04',
+            'label' => 'Owner stay',
+        ]);
+        Booking::factory()->create([
+            'user_uuid' => $property->user_uuid,
+            'unit_uuid' => $unit->uuid,
+            'check_in' => '2026-12-10',
+            'check_out' => '2026-12-12',
+            'status' => Booking::STATUS_ACCEPTED,
+        ]);
+        Booking::factory()->create([
+            'user_uuid' => $property->user_uuid,
+            'unit_uuid' => $unit->uuid,
+            'check_in' => '2026-12-05',
+            'check_out' => '2026-12-06',
+            'status' => Booking::STATUS_PENDING,
+        ]);
+
+        $this->withHeader('X-Partner-Key', self::KEY)
+            ->getJson('/api/v1/partners/ticketoc/availability?'.http_build_query([
+                'from' => '2026-12-01',
+                'to' => '2026-12-14',
+                'unit_ids' => [$unit->uuid],
+            ]))
+            ->assertOk()
+            ->assertJsonPath('units.0.id', $unit->uuid)
+            ->assertJsonFragment(['start_date' => '2026-12-02', 'end_date' => '2026-12-03'])
+            ->assertJsonFragment(['start_date' => '2026-12-09', 'end_date' => '2026-12-11'])
+            ->assertJsonMissing(['start_date' => '2026-12-05']);
     }
 }
